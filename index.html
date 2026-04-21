@@ -1,0 +1,3101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indisponibilidad Energética — O&M GEN Chile</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07090d;--panel:#0d1117;--border:#1a2130;--bhi:#253040;
+  --accent:#f5a623;--red:#ff5f52;--green:#2ecc71;--blue:#3498db;--purple:#9b59b6;
+  --text:#d4e4f0;--muted:#7a94a8;
+  --mono:'Share Tech Mono',monospace;--head:'Barlow Condensed',sans-serif;--body:'Barlow',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(245,166,35,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(245,166,35,.02) 1px,transparent 1px);
+  background-size:48px 48px;pointer-events:none;z-index:0;}
+
+/* ── LOADING ── */
+#loadingOverlay{position:fixed;inset:0;background:#05070a;z-index:100;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  transition:opacity .8s cubic-bezier(.4,0,.2,1),transform .8s cubic-bezier(.4,0,.2,1);}
+#loadingOverlay.dismiss{opacity:0;transform:scale(1.02);pointer-events:none;}
+
+/* Canvas de fondo - red de nodos */
+#ldCanvas{position:absolute;inset:0;opacity:.4;}
+
+/* Vignette */
+.ld-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,transparent 30%,#05070a 75%);pointer-events:none;z-index:1;}
+
+/* Contenedor principal */
+.ld-main{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;max-width:860px;padding:0 24px;}
+
+/* ── TOPOLOGÍA CEM ↔ CET ── */
+.ld-topo{width:100%;height:220px;margin-bottom:30px;opacity:0;transform:translateY(8px);
+  transition:opacity .8s ease,transform .8s ease;}
+.ld-topo.visible{opacity:1;transform:none;}
+.ld-topo svg{width:100%;height:100%;}
+
+/* Nodos de la topología */
+.topo-node{fill:#0d1117;stroke:#1a2130;stroke-width:1.5;transition:all .6s ease;}
+.topo-node.on{fill:#0d1117;stroke-width:1.5;}
+/* Colores CEM (azul base) */
+#tn-ctm3.on{stroke:#3498db;filter:drop-shadow(0 0 5px rgba(52,152,219,.4));}
+#tn-cta.on{stroke:#2ecc71;filter:drop-shadow(0 0 5px rgba(46,204,113,.4));}
+#tn-cth.on{stroke:#9b59b6;filter:drop-shadow(0 0 5px rgba(155,89,182,.4));}
+#tn-iem.on{stroke:#f5a623;filter:drop-shadow(0 0 5px rgba(245,166,35,.4));}
+/* Colores CET (púrpura/rojo base) */
+#tn-u16.on{stroke:#e74c3c;filter:drop-shadow(0 0 5px rgba(231,76,60,.4));}
+#tn-tg3.on{stroke:#f39c12;filter:drop-shadow(0 0 5px rgba(243,156,18,.4));}
+#tn-tg1.on{stroke:#00bcd4;filter:drop-shadow(0 0 5px rgba(0,188,212,.4));}
+#tn-tg2.on{stroke:#8e44ad;filter:drop-shadow(0 0 5px rgba(142,68,173,.4));}
+
+.topo-label{font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;
+  fill:#253040;text-anchor:middle;transition:fill .6s ease;}
+.topo-label.on{fill:#d4e4f0;}
+/* Labels CEM con color sitio */
+#tl-cem.on{fill:#85c1e9;font-size:20px !important;filter:drop-shadow(0 0 10px rgba(52,152,219,.6));}
+#tl-cet.on{fill:#d2b4de;font-size:20px !important;filter:drop-shadow(0 0 10px rgba(155,89,182,.6));}
+/* Labels unidades con color propio */
+#tl-ctm3.on{fill:#3498db;}#tl-cta.on{fill:#2ecc71;}#tl-cth.on{fill:#9b59b6;}#tl-iem.on{fill:#f5a623;}
+#tl-u16.on{fill:#e74c3c;}#tl-tg3.on{fill:#f39c12;}#tl-tg1.on{fill:#00bcd4;}#tl-tg2.on{fill:#8e44ad;}
+
+.topo-val{font-family:'Share Tech Mono',monospace;font-size:10px;fill:#1a2130;text-anchor:middle;
+  transition:fill .6s ease;}
+.topo-val.on{fill:#7a94a8;}
+
+/* Conexiones entre nodos */
+.topo-link{stroke:#111825;stroke-width:1;fill:none;transition:stroke .6s ease;}
+.topo-link.on{stroke:#253040;}
+/* Pulso viajero sobre las conexiones */
+.topo-pulse{stroke:var(--accent);stroke-width:1.5;fill:none;stroke-dasharray:4 60;stroke-dashoffset:0;
+  opacity:0;transition:opacity .3s ease;}
+.topo-pulse.on{opacity:1;animation:pulseTx 2s linear infinite;}
+/* Colores de pulso por unidad */
+#tp-ctm3.on{stroke:#3498db;filter:drop-shadow(0 0 3px rgba(52,152,219,.6));}
+#tp-cta.on{stroke:#2ecc71;filter:drop-shadow(0 0 3px rgba(46,204,113,.6));}
+#tp-cth.on{stroke:#9b59b6;filter:drop-shadow(0 0 3px rgba(155,89,182,.6));}
+#tp-iem.on{stroke:#f5a623;filter:drop-shadow(0 0 3px rgba(245,166,35,.6));}
+#tp-u16.on{stroke:#e74c3c;filter:drop-shadow(0 0 3px rgba(231,76,60,.6));}
+#tp-tg3.on{stroke:#f39c12;filter:drop-shadow(0 0 3px rgba(243,156,18,.6));}
+#tp-tg1.on{stroke:#00bcd4;filter:drop-shadow(0 0 3px rgba(0,188,212,.6));}
+#tp-tg2.on{stroke:#8e44ad;filter:drop-shadow(0 0 3px rgba(142,68,173,.6));}
+@keyframes pulseTx{to{stroke-dashoffset:-64;}}
+
+/* Hub central */
+.topo-hub{fill:#0d1117;stroke:#1a2130;stroke-width:1.5;transition:all .6s ease;}
+.topo-hub.on{stroke:var(--green);filter:drop-shadow(0 0 8px rgba(46,204,113,.3));}
+.topo-hub-lbl{font-family:'Share Tech Mono',monospace;font-size:7px;fill:#253040;text-anchor:middle;
+  letter-spacing:1px;transition:fill .6s ease;}
+.topo-hub-lbl.on{fill:var(--green);}
+
+/* KPI mini-indicators */
+.topo-kpi{font-family:'Share Tech Mono',monospace;font-size:6.5px;fill:#1a2130;text-anchor:middle;
+  transition:fill .5s ease;letter-spacing:.5px;}
+.topo-kpi.on{fill:#5a7a90;}
+
+/* ── TÍTULO ── */
+.ld-brand{text-align:center;margin-bottom:20px;opacity:0;transform:translateY(6px);
+  transition:opacity .7s ease,transform .7s ease;}
+.ld-brand.visible{opacity:1;transform:none;}
+.ld-eyebrow{font-family:'Share Tech Mono',monospace;font-size:13px;color:#253040;letter-spacing:5px;
+  margin-bottom:8px;transition:color .6s ease .2s;}
+.ld-eyebrow.on{color:var(--accent);}
+.ld-title{font-family:'Barlow Condensed',sans-serif;font-size:clamp(40px,7vw,60px);font-weight:900;
+  color:#0d1117;letter-spacing:6px;line-height:1;transition:color .8s ease;}
+.ld-title.on{color:#fff;}
+.ld-title em{font-style:normal;transition:color .8s ease .1s;}
+.ld-title.on em{color:var(--accent);}
+.ld-rule{width:0;height:1px;margin:10px auto 0;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  transition:width 1s cubic-bezier(.4,0,.2,1);}
+.ld-rule.on{width:280px;}
+
+/* ── PROGRESS ── */
+.ld-prog-wrap{width:280px;margin-bottom:12px;opacity:0;transform:translateY(4px);
+  transition:opacity .4s ease,transform .4s ease;}
+.ld-prog-wrap.visible{opacity:1;transform:none;}
+.ld-progress{width:100%;height:2px;background:#111825;border-radius:1px;overflow:hidden;}
+.ld-progress-bar{height:100%;width:0;border-radius:1px;
+  background:linear-gradient(90deg,var(--accent),#f7c873);
+  box-shadow:0 0 8px rgba(245,166,35,.5);
+  transition:width .5s cubic-bezier(.4,0,.2,1);}
+.ld-pct{font-family:'Share Tech Mono',monospace;font-size:12px;color:#253040;
+  text-align:right;margin-top:5px;letter-spacing:1px;transition:color .3s ease;}
+.ld-pct.on{color:#5a7a90;}
+
+/* ── STATUS ── */
+.ld-status-wrap{display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .4s ease;}
+.ld-status-wrap.visible{opacity:1;}
+.ld-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);
+  animation:dotPulse 1.2s ease-in-out infinite;}
+@keyframes dotPulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+.ld-status{font-family:'Share Tech Mono',monospace;font-size:13px;color:#5a7a90;letter-spacing:2px;}
+.ld-error{font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--red);margin-top:16px;
+  max-width:400px;line-height:1.8;text-align:left;}
+.ld-retry{font-family:'Share Tech Mono',monospace;font-size:14px;background:var(--accent);color:#000;
+  border:none;padding:10px 28px;cursor:pointer;margin-top:14px;font-weight:700;letter-spacing:3px;
+  transition:all .2s;}
+.ld-retry:hover{box-shadow:0 0 20px rgba(245,166,35,.3);}
+
+/* ── WRAP ── */
+
+/* ── SIDEBAR FIJO ── */
+.sidebar{
+  position:fixed;top:0;left:0;bottom:0;
+  width:124px;
+  background:rgba(7,9,13,0.98);
+  border-right:2px solid var(--bhi);
+  z-index:50;
+  display:flex;flex-direction:column;align-items:stretch;
+  padding:14px 7px;gap:8px;
+  overflow-y:auto;
+  transition:width .2s ease;
+}
+.sidebar.expanded{width:228px;}
+.wrap{position:relative;z-index:1;max-width:1600px;margin:0 auto;padding:20px 24px;padding-left:138px;transition:padding-left .2s ease;}
+.wrap.expanded{padding-left:242px;}
+/* Cada grupo es una caja visible */
+.sb-section{
+  width:100%;
+  background:var(--panel);
+  border:1px solid var(--bhi);
+  border-radius:5px;
+  padding:9px 6px 8px;
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+}
+.sb-lbl{
+  font-family:var(--head);font-size:13px;font-weight:900;letter-spacing:3px;
+  color:var(--accent);text-transform:uppercase;text-align:center;
+  width:100%;border-bottom:1px solid var(--bhi);padding-bottom:7px;margin-bottom:2px;
+}
+.sb-pills{display:flex;flex-direction:column;gap:5px;width:100%;}
+.sb-divider{display:none;} /* ya no se usa — las cajas separan los grupos */
+/* Pills verticales en sidebar */
+.sidebar .pill{
+  font-family:var(--mono);font-size:14px;letter-spacing:1px;font-weight:700;
+  padding:9px 4px;background:rgba(255,255,255,0.03);color:#8fafc2;
+  border:1px solid var(--bhi);cursor:pointer;transition:all .18s;
+  border-radius:3px;width:100%;text-align:center;white-space:nowrap;
+}
+.sidebar .pill:hover:not([class*="active"]){background:rgba(245,166,35,.08);color:var(--accent);border-color:var(--accent);}
+/* Toggle DF/LF */
+.sb-toggle{font-size:15px!important;letter-spacing:3px!important;padding:10px 4px!important;font-weight:900!important;}
+.sb-toggle.active-both{background:linear-gradient(135deg,var(--red) 50%,var(--accent) 50%)!important;color:#fff!important;border-color:var(--red)!important;}
+.sb-toggle.active-df{background:var(--red)!important;color:#fff!important;border-color:var(--red)!important;}
+.sb-toggle.active-lf{background:var(--accent)!important;color:#000!important;border-color:var(--accent)!important;}
+.sb-toggle.inactive{background:transparent!important;color:#334455!important;border-color:#1a2130!important;text-decoration:line-through;opacity:.5;}
+
+/* HEADER */
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  border-bottom:2px solid var(--accent);padding-bottom:14px;margin-bottom:18px;}
+.h-tag{font-family:var(--mono);font-size:16px;color:var(--accent);letter-spacing:4px;margin-bottom:5px;}
+h1{font-family:var(--head);font-size:clamp(34px,5.17vw,60px);font-weight:900;color:#fff;line-height:1;}
+h1 span{color:var(--accent);}
+.h-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+.h-meta{font-family:var(--mono);font-size:16px;color:#9ab0c0;text-align:right;line-height:1.9;}
+.h-meta b{color:#e0eef8;}
+.h-sync{font-family:var(--mono);font-size:16px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border:1px solid var(--border);transition:all .2s;}
+.h-sync:hover{border-color:var(--accent);color:var(--accent);}
+.h-sync.syncing .sync-icon{animation:spin 1s linear infinite;}
+
+/* METHODOLOGY */
+.meth-box{background:rgba(52,152,219,.06);border:1px solid rgba(52,152,219,.2);border-left:3px solid var(--blue);
+  padding:10px 14px;margin-bottom:18px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;}
+.meth-formula{font-family:var(--mono);font-size:16px;color:var(--text);line-height:1.9;}
+.meth-formula b{color:var(--accent);}
+.meth-note{font-family:var(--mono);font-size:16px;color:#9ab0c0;line-height:1.8;flex:1;min-width:220px;}
+
+/* CONTROLS */
+.ctrl-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  background:var(--panel);border:1px solid var(--border);padding:12px 16px;margin-bottom:18px;}
+.ctrl-group{display:flex;flex-direction:column;gap:4px;}
+.ctrl-lbl{font-family:var(--mono);font-size:16px;color:#9ab0c0;letter-spacing:2px;text-transform:uppercase;}
+.pill-row{display:flex;gap:0;border:1px solid var(--bhi);border-radius:3px;overflow:hidden;}
+.pill{font-family:var(--mono);font-size:16px;letter-spacing:1px;font-weight:600;
+  padding:8px 18px;background:transparent;color:#8fafc2;border:none;
+  cursor:pointer;transition:all .18s;border-right:1px solid var(--bhi);white-space:nowrap;}
+.pill:last-child{border-right:none;}
+.pill:hover:not(.active){background:rgba(245,166,35,.07);color:var(--accent);}
+.pill.active.yr{background:var(--accent);color:#000;}
+.pill.active.scope-flota{background:var(--red);color:#fff;}
+.pill.active.scope-cem{background:var(--blue);color:#fff;}
+.pill.active.scope-cet{background:var(--purple);color:#fff;}
+.pill.active.scope-unit{background:var(--green);color:#000;}
+.ctrl-sep{width:1px;background:var(--border);align-self:stretch;margin:0 4px;}
+.scope-badge{font-family:var(--mono);font-size:16px;padding:4px 13px;border-radius:2px;letter-spacing:1px;font-weight:700;}
+.sb-flota{background:rgba(231,76,60,.15);color:var(--red);border:1px solid rgba(231,76,60,.3);}
+.sb-cem{background:rgba(52,152,219,.15);color:var(--blue);border:1px solid rgba(52,152,219,.3);}
+.sb-cet{background:rgba(155,89,182,.15);color:var(--purple);border:1px solid rgba(155,89,182,.3);}
+.sb-unit{background:rgba(46,204,113,.15);color:var(--green);border:1px solid rgba(46,204,113,.3);}
+
+/* SECTION */
+.st{font-family:var(--head);font-size:16px;font-weight:700;letter-spacing:3px;text-transform:uppercase;
+  color:var(--accent);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+.st::after{content:'';flex:1;height:1px;background:var(--bhi);}
+.st-sub{color:#8fafc2;font-size:16px;letter-spacing:1px;font-weight:400;}
+
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;}
+.kpi{background:var(--panel);border:1px solid var(--border);padding:14px;text-align:center;position:relative;overflow:hidden;cursor:pointer;transition:border-color .18s,transform .18s,box-shadow .18s;}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.4);}
+.kpi.k1:hover{border-color:var(--blue);}
+.kpi.k2:hover{border-color:var(--red);}
+.kpi.k3:hover{border-color:var(--accent);}
+.kpi.k4:hover{border-color:var(--green);}
+.kpi.k5:hover{border-color:var(--purple);}
+.kpi::before{content:'🔍';position:absolute;top:6px;right:8px;font-size:11px;opacity:0;transition:opacity .18s;}
+.kpi:hover::before{opacity:0.5;}
+.kpi::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;}
+.kpi.k1::after{background:var(--blue);}.kpi.k2::after{background:var(--red);}
+.kpi.k3::after{background:var(--accent);}.kpi.k4::after{background:var(--green);}.kpi.k5::after{background:var(--purple);}
+.kpi-lbl{font-family:var(--mono);font-size:16px;color:#9ab0c0;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;line-height:1.5;min-height:2.8em;display:flex;align-items:center;justify-content:center;}
+.kpi-val{font-family:var(--head);font-size:clamp(34px,4.6vw,55px);font-weight:900;line-height:1;}
+.kpi-val.k1{color:var(--blue);}.kpi-val.k2{color:var(--red);}.kpi-val.k3{color:var(--accent);}.kpi-val.k4{color:var(--green);}.kpi-val.k5{color:var(--purple);}
+.kpi-sub{font-family:var(--mono);font-size:16px;color:#9ab0c0;margin-top:4px;}
+
+/* KPI DETAIL */
+.kpi-detail{background:var(--panel);border:1px solid var(--border);padding:20px;margin-bottom:18px;animation:fi .2s ease;}
+.kpi-detail-header{display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--bhi);}
+.kpi-detail-back{font-family:var(--mono);font-size:14px;padding:5px 12px;background:transparent;color:var(--muted);border:1px solid var(--bhi);cursor:pointer;border-radius:3px;transition:all .18s;}
+.kpi-detail-back:hover{color:var(--accent);border-color:var(--accent);}
+.kpi-detail-title{font-family:var(--head);font-size:20px;font-weight:900;letter-spacing:2px;color:#fff;text-transform:uppercase;}
+.kpi-detail-result{font-family:var(--head);font-size:38px;font-weight:900;margin-left:auto;}
+.kpi-detail-formula{font-family:var(--mono);font-size:14px;color:#9ab0c0;background:rgba(52,152,219,.05);border-left:3px solid var(--blue);padding:8px 14px;margin-bottom:16px;line-height:1.8;}
+.kpi-detail-formula b{color:var(--accent);}
+.kpi-dtable{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:14px;}
+.kpi-dtable th{font-family:var(--head);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);padding:6px 10px;text-align:right;border-bottom:1px solid var(--bhi);}
+.kpi-dtable th:first-child{text-align:left;}
+.kpi-dtable td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--border);color:#ccdde8;}
+.kpi-dtable td:first-child{text-align:left;color:#fff;font-weight:700;}
+.kpi-dtable tr:hover td{background:rgba(245,166,35,.03);}
+.kpi-dtable tfoot td{font-family:var(--head);font-size:14px;font-weight:700;color:var(--accent);border-top:2px solid var(--bhi);padding:8px 10px;}
+
+/* KPI TODAY ROW */
+.kpi-today-bar{margin-top:10px;margin-bottom:18px;}
+.kpi-today-lbl{font-family:var(--mono);font-size:11px;color:#f5a623;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.kpi-today-lbl::before{content:'';display:inline-block;width:10px;height:10px;border-radius:50%;background:#f5a623;}
+.kpi-today-lbl::after{content:'';flex:1;height:1px;background:rgba(245,166,35,.2);}
+.kpi-row-today .kpi{background:rgba(245,166,35,.04);border-color:rgba(245,166,35,.15);}
+.kpi-row-today .kpi::after{opacity:.6;}
+.cards-wrap{margin-bottom:18px;}
+.cards-section{margin-bottom:12px;}
+.site-header{font-family:var(--head);font-size:18px;font-weight:700;letter-spacing:3px;text-transform:uppercase;
+  padding:6px 12px;margin-bottom:8px;display:inline-block;border-radius:2px;}
+.sh-cem{background:rgba(52,152,219,.12);color:var(--blue);border:1px solid rgba(52,152,219,.25);}
+.sh-cet{background:rgba(155,89,182,.12);color:var(--purple);border:1px solid rgba(155,89,182,.25);}
+.cards{display:grid;gap:10px;}
+.cards.n6{grid-template-columns:repeat(6,1fr);}.cards.n4{grid-template-columns:repeat(4,1fr);}
+.cards.n2{grid-template-columns:repeat(2,1fr);}.cards.n1{grid-template-columns:1fr;max-width:360px;}
+.card{background:var(--panel);border:1px solid var(--border);border-top:3px solid var(--bhi);padding:14px;cursor:pointer;transition:all .18s;}
+.card:hover{border-color:var(--accent);transform:translateY(-1px);}
+.card.crit{border-top-color:var(--red);}.card.warn{border-top-color:var(--accent);}.card.ok{border-top-color:var(--green);}
+.card.inactive{border-top-color:var(--muted);opacity:.5;cursor:default;}
+.c-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.c-name{font-family:var(--head);font-size:30px;font-weight:900;color:#fff;}
+.c-badge{font-family:var(--mono);font-size:16px;padding:3px 8px;border-radius:2px;letter-spacing:1px;}
+.b-ok{background:rgba(46,204,113,.15);color:var(--green);border:1px solid rgba(46,204,113,.3);}
+.b-warn{background:rgba(245,166,35,.15);color:var(--accent);border:1px solid rgba(245,166,35,.3);}
+.b-crit{background:rgba(231,76,60,.15);color:var(--red);border:1px solid rgba(231,76,60,.3);}
+.b-na{background:rgba(74,90,106,.15);color:var(--muted);border:1px solid rgba(74,90,106,.3);}
+.c-metric{margin-bottom:6px;}
+.c-mlbl{font-family:var(--mono);font-size:13px;color:#8fafc2;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;}
+.c-mval{font-family:var(--mono);font-size:18px;color:#e8f4ff;}
+.c-mval.red{color:var(--red);}.c-mval.grn{color:var(--green);}.c-mval.ora{color:var(--accent);}.c-mval.blu{color:var(--blue);}
+.c-metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-bottom:6px;}
+.c-bar{height:6px;background:var(--border);position:relative;overflow:hidden;margin-top:10px;}
+.c-bar-fill{height:100%;position:absolute;left:0;transition:width .5s ease;}
+.c-pwr{font-family:var(--mono);font-size:14px;color:#8fafc2;margin-top:6px;}
+
+/* TIMELINE */
+.tl-wrap{background:var(--panel);border:1px solid var(--border);padding:18px;margin-bottom:18px;}
+.tl-unit{margin-bottom:12px;}
+.tl-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;}
+.tl-name{font-family:var(--head);font-size:18px;font-weight:700;color:#fff;}
+.tl-site{font-family:var(--mono);font-size:16px;padding:1px 6px;border-radius:2px;margin-left:6px;}
+.ts-cem{background:rgba(52,152,219,.15);color:var(--blue);}
+.ts-cet{background:rgba(155,89,182,.15);color:var(--purple);}
+.tl-pct{font-family:var(--mono);font-size:16px;color:#c0d4e4;}
+.tl-bar{height:30px;background:var(--bg);border:1px solid var(--border);display:flex;overflow:hidden;}
+.tl-seg{height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.tl-slbl{font-family:var(--mono);font-size:16px;color:rgba(255,255,255,.9);white-space:nowrap;letter-spacing:1px;}
+.seg-hs{background:rgba(46,204,113,.35);border-right:1px solid rgba(46,204,113,.45);}
+.seg-lf{background:rgba(245,166,35,.55);border-right:1px solid rgba(245,166,35,.65);}
+.seg-pm{background:rgba(52,152,219,.5);border-right:1px solid rgba(52,152,219,.6);}
+.seg-fo{background:rgba(231,76,60,.7);border-right:1px solid rgba(231,76,60,.8);}
+.seg-na{background:repeating-linear-gradient(45deg,rgba(74,90,106,.12) 0,rgba(74,90,106,.12) 4px,transparent 4px,transparent 8px);width:100%!important;}
+.tl-leg{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;}
+.leg-i{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:16px;color:#9ab0c0;}
+.leg-d{width:13px;height:13px;border-radius:2px;flex-shrink:0;}
+
+/* CHART */
+.chart-section{background:var(--panel);border:1px solid var(--border);padding:18px;margin-bottom:18px;}
+.chart-canvas-wrap{height:220px;margin-bottom:4px;}
+.bars-wrap{display:flex;height:100%;align-items:stretch;gap:3px;}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;}
+.bar-stack{flex:1;width:100%;display:flex;flex-direction:column-reverse;}
+.bar-seg{width:100%;min-height:0;}
+.bar-seg.bs-fo{background:rgba(231,76,60,.8);}
+.bar-seg.bs-lf{background:rgba(245,166,35,.75);}
+.bar-seg.bs-pm{background:rgba(52,152,219,.65);}
+.bar-seg.bs-hs{background:rgba(46,204,113,.45);}
+.bar-seg.bs-na{background:var(--border);opacity:.3;}
+.bar-mlbl{font-family:var(--mono);font-size:16px;color:#9ab0c0;margin-top:5px;text-align:center;}
+.bar-ind{font-family:var(--mono);font-size:16px;margin-bottom:3px;text-align:center;white-space:nowrap;}
+.chart-leg{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;}
+.chart-leg .leg-i{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:16px;color:#9ab0c0;}
+.chart-leg .leg-d{width:13px;height:13px;border-radius:2px;flex-shrink:0;}
+
+/* TABLE */
+.evtab-wrap{background:var(--panel);border:1px solid var(--border);overflow-x:hidden;margin-bottom:18px;}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:16px;table-layout:fixed;}
+thead tr{background:var(--bg);border-bottom:2px solid var(--accent);}
+thead th{padding:10px 6px;text-align:center;font-family:var(--head);font-size:16px;font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;color:var(--accent);
+  white-space:normal;word-break:break-word;line-height:1.3;vertical-align:bottom;}
+thead th:first-child{text-align:left;}
+tbody tr{border-bottom:1px solid var(--border);transition:background .15s;}
+tbody tr:hover{background:rgba(245,166,35,.03);}
+tbody tr.inactive-row{opacity:.45;}
+tbody td{padding:9px 6px;color:#ccdde8;text-align:center;white-space:nowrap;}
+tbody td:first-child{color:#fff;text-align:left;}
+tfoot tr{background:var(--bg);border-top:2px solid var(--bhi);}
+tfoot td{padding:10px 6px;font-family:var(--head);font-size:16px;font-weight:700;color:var(--accent);text-align:center;}
+tfoot td:first-child{text-align:left;}
+.tag-fo{background:rgba(231,76,60,.15);color:var(--red);border:1px solid rgba(231,76,60,.3);padding:2px 8px;border-radius:2px;font-size:16px;}
+.tag-lf{background:rgba(245,166,35,.15);color:var(--accent);border:1px solid rgba(245,166,35,.3);padding:2px 8px;border-radius:2px;font-size:16px;}
+.tag-pm{background:rgba(52,152,219,.15);color:var(--blue);border:1px solid rgba(52,152,219,.3);padding:2px 8px;border-radius:2px;font-size:16px;}
+.v-ok{color:var(--green);}.v-warn{color:var(--accent);}.v-crit{color:var(--red);}.v-na{color:var(--muted);}
+.site-tag{font-family:var(--mono);font-size:16px;padding:2px 7px;border-radius:2px;margin-left:4px;}
+.ts-cem{background:rgba(52,152,219,.15);color:var(--blue);}
+.ts-cet{background:rgba(155,89,182,.15);color:var(--purple);}
+
+.ev-sort-btn{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:1px;
+  padding:6px 14px;background:transparent;color:#8fafc2;
+  border:1px solid var(--bhi);cursor:pointer;border-radius:3px;transition:all .18s;}
+.ev-sort-btn:hover{border-color:var(--accent);color:var(--accent);}
+.ev-sort-btn.active{background:var(--accent);color:#000;border-color:var(--accent);}
+
+/* TOP EVENTS */
+.topev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:18px;}
+.topev-card{background:var(--panel);border:1px solid var(--border);padding:14px;}
+.topev-title{font-family:var(--head);font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;}
+.ev-row{display:grid;grid-template-columns:52px 72px 1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);}
+.ev-row:last-child{border-bottom:none;}
+.ev-empty{font-family:var(--mono);font-size:16px;color:var(--muted);padding:10px 0;text-align:center;}
+.ev-dur{font-family:var(--mono);font-size:16px;font-weight:700;color:#fff;}
+.ev-date{font-family:var(--mono);font-size:16px;color:#9ab0c0;line-height:1.5;}
+.ev-energy{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--blue);text-align:right;white-space:nowrap;}
+
+.foot{font-family:var(--mono);font-size:16px;color:#8fafc2;border-top:1px solid var(--border);padding-top:12px;text-align:center;line-height:2.4;}
+.fade{animation:fi .25s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:none;}}
+
+@media(max-width:1000px){.kpi-row{grid-template-columns:repeat(3,1fr);}.cards.n6{grid-template-columns:repeat(3,1fr);}.cards.n4{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:640px){.kpi-row{grid-template-columns:repeat(2,1fr);}.cards.n6,.cards.n4,.cards.n2{grid-template-columns:repeat(2,1fr);}}
+
+/* ── SECCIÓN MENSUAL INTEGRADA ── */
+.month-section{background:var(--panel);border:1px solid var(--border);padding:20px;margin-bottom:18px;}
+.month-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border);overflow-x:auto;}
+.month-tab{font-family:var(--mono);font-size:13px;letter-spacing:1px;font-weight:700;
+  padding:10px 16px;background:transparent;color:#4a6070;border:none;
+  cursor:pointer;transition:all .2s;position:relative;white-space:nowrap;
+  border-bottom:2px solid transparent;margin-bottom:-2px;}
+.month-tab:hover{color:var(--text);background:rgba(245,166,35,.03);}
+.month-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(245,166,35,.05);}
+.month-tab.tab-all{letter-spacing:2px;}
+
+/* KPIs compactos del mes */
+.month-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;
+  padding:14px;background:rgba(245,166,35,.02);border:1px solid rgba(245,166,35,.08);border-radius:4px;}
+.month-kpis.today-kpis{background:rgba(245,166,35,.04);border-color:rgba(245,166,35,.12);}
+.mk-item{text-align:center;cursor:pointer;padding:8px 4px;border-radius:3px;transition:all .18s;}
+.mk-item:hover{background:rgba(255,255,255,.03);}
+.mk-label{font-family:var(--mono);font-size:10px;color:#6a8a9a;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
+.mk-value{font-family:var(--head);font-size:clamp(22px,3vw,32px);font-weight:900;line-height:1.1;}
+.mk-sub{font-family:var(--mono);font-size:10px;color:#4a6a7a;margin-top:3px;}
+.mk-value.v-blue{color:var(--blue);}.mk-value.v-green{color:var(--green);}
+.mk-value.v-red{color:var(--red);}.mk-value.v-accent{color:var(--accent);}
+.mk-value.v-purple{color:var(--purple);}
+
+/* Header del mes con progreso */
+.month-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
+.month-title{font-family:var(--head);font-size:18px;font-weight:900;color:#fff;letter-spacing:2px;text-transform:uppercase;}
+.month-period{font-family:var(--mono);font-size:12px;color:var(--muted);}
+.month-progress{display:flex;align-items:center;gap:8px;}
+.month-prog-bar{width:80px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.month-prog-fill{height:100%;background:var(--accent);border-radius:2px;}
+.month-prog-pct{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700;}
+
+/* Separador hoy */
+.month-today-sep{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:2px;
+  display:flex;align-items:center;gap:8px;margin:12px 0 10px;text-transform:uppercase;}
+.month-today-sep::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);}
+.month-today-sep::after{content:'';flex:1;height:1px;background:rgba(245,166,35,.2);}</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingOverlay">
+  <canvas id="ldCanvas"></canvas>
+  <div class="ld-vignette"></div>
+
+  <div class="ld-main">
+    <!-- Topología CEM ↔ CET -->
+    <div class="ld-topo" id="ldTopo">
+      <svg viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="gN" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- ═══ CEM (izquierda) ═══ -->
+        <text x="175" y="16" class="topo-label" id="tl-cem" style="font-size:20px;letter-spacing:6px;fill:#4a6a8a;font-weight:900">CEM</text>
+
+        <!-- CTM3 — #3498db -->
+        <rect class="topo-node" id="tn-ctm3" x="60" y="32" width="60" height="30" rx="3"/>
+        <text class="topo-label" id="tl-ctm3" x="90" y="51" style="font-size:12px">CTM3</text>
+        <text class="topo-val" id="tv-ctm3" x="90" y="74" style="font-size:10px">234.67 MW</text>
+        <!-- Línea CTM3 → Hub -->
+        <path class="topo-link" id="tk-ctm3" d="M90,62 L90,120 Q90,130 100,130 L345,130"/>
+        <path class="topo-pulse" id="tp-ctm3" d="M90,62 L90,120 Q90,130 100,130 L345,130"/>
+
+        <!-- CTA — #2ecc71 -->
+        <rect class="topo-node" id="tn-cta" x="135" y="32" width="50" height="30" rx="3"/>
+        <text class="topo-label" id="tl-cta" x="160" y="51" style="font-size:12px">CTA</text>
+        <text class="topo-val" id="tv-cta" x="160" y="74" style="font-size:10px">161.15 MW</text>
+        <!-- Línea CTA → Hub -->
+        <path class="topo-link" id="tk-cta" d="M160,62 L160,108 Q160,118 170,118 L345,118"/>
+        <path class="topo-pulse" id="tp-cta" d="M160,62 L160,108 Q160,118 170,118 L345,118" style="animation-delay:.3s"/>
+
+        <!-- CTH — #9b59b6 -->
+        <rect class="topo-node" id="tn-cth" x="200" y="32" width="50" height="30" rx="3"/>
+        <text class="topo-label" id="tl-cth" x="225" y="51" style="font-size:12px">CTH</text>
+        <text class="topo-val" id="tv-cth" x="225" y="74" style="font-size:10px">157.61 MW</text>
+        <!-- Línea CTH → Hub -->
+        <path class="topo-link" id="tk-cth" d="M225,62 L225,96 Q225,106 235,106 L345,106"/>
+        <path class="topo-pulse" id="tp-cth" d="M225,62 L225,96 Q225,106 235,106 L345,106" style="animation-delay:.6s"/>
+
+        <!-- IEM — #f5a623 -->
+        <rect class="topo-node" id="tn-iem" x="265" y="32" width="50" height="30" rx="3"/>
+        <text class="topo-label" id="tl-iem" x="290" y="51" style="font-size:12px">IEM</text>
+        <text class="topo-val" id="tv-iem" x="290" y="74" style="font-size:10px">347.95 MW</text>
+        <!-- Línea IEM → Hub -->
+        <path class="topo-link" id="tk-iem" d="M290,62 L290,88 Q290,96 300,96 L345,96"/>
+        <path class="topo-pulse" id="tp-iem" d="M290,62 L290,88 Q290,96 300,96 L345,96" style="animation-delay:.9s"/>
+
+        <!-- ═══ HUB CENTRAL ═══ -->
+        <rect class="topo-hub" id="tn-hub" x="345" y="88" width="70" height="50" rx="5"/>
+        <text class="topo-hub-lbl" id="tl-hub" x="380" y="108" style="font-size:13px;font-weight:700">O&amp;M</text>
+        <text class="topo-hub-lbl" id="tl-hub2" x="380" y="122" style="font-size:10px;letter-spacing:3px">GEN CL</text>
+
+        <!-- KPIs bajo el hub -->
+        <text class="topo-kpi" id="tk-ind" x="358" y="152" style="font-size:10px">IND</text>
+        <text class="topo-kpi" id="tk-disp" x="380" y="152" style="font-size:10px">DISP</text>
+        <text class="topo-kpi" id="tk-for" x="402" y="152" style="font-size:10px">FOR</text>
+
+        <!-- ═══ CET (derecha) ═══ -->
+        <text x="585" y="16" class="topo-label" id="tl-cet" style="font-size:20px;letter-spacing:6px;fill:#4a6a8a;font-weight:900">CET</text>
+
+        <!-- U16 — #e74c3c -->
+        <rect class="topo-node" id="tn-u16" x="450" y="32" width="50" height="30" rx="3"/>
+        <text class="topo-label" id="tl-u16" x="475" y="51" style="font-size:12px">U16</text>
+        <text class="topo-val" id="tv-u16" x="475" y="74" style="font-size:10px">393.57 MW</text>
+        <!-- Línea U16 → Hub -->
+        <path class="topo-link" id="tk-u16" d="M475,62 L475,88 Q475,96 465,96 L415,96"/>
+        <path class="topo-pulse" id="tp-u16" d="M475,62 L475,88 Q475,96 465,96 L415,96" style="animation-delay:.3s"/>
+
+        <!-- TG3 — #f39c12 -->
+        <rect class="topo-node" id="tn-tg3" x="515" y="32" width="50" height="30" rx="3"/>
+        <text class="topo-label" id="tl-tg3" x="540" y="51" style="font-size:12px">TG3</text>
+        <text class="topo-val" id="tv-tg3" x="540" y="74" style="font-size:10px">19.87 MW</text>
+        <!-- Línea TG3 → Hub -->
+        <path class="topo-link" id="tk-tg3" d="M540,62 L540,96 Q540,106 530,106 L415,106"/>
+        <path class="topo-pulse" id="tp-tg3" d="M540,62 L540,96 Q540,106 530,106 L415,106" style="animation-delay:.6s"/>
+
+        <!-- TG1 — #00bcd4 -->
+        <rect class="topo-node" id="tn-tg1" x="580" y="32" width="50" height="30" rx="3"/>
+        <text class="topo-label" id="tl-tg1" x="605" y="51" style="font-size:12px">TG1</text>
+        <text class="topo-val" id="tv-tg1" x="605" y="74" style="font-size:10px">19.57 MW</text>
+        <!-- Línea TG1 → Hub -->
+        <path class="topo-link" id="tk-tg1" d="M605,62 L605,108 Q605,118 595,118 L415,118"/>
+        <path class="topo-pulse" id="tp-tg1" d="M605,62 L605,108 Q605,118 595,118 L415,118" style="animation-delay:.9s"/>
+
+        <!-- TG2 — #8e44ad -->
+        <rect class="topo-node" id="tn-tg2" x="645" y="32" width="50" height="30" rx="3"/>
+        <text class="topo-label" id="tl-tg2" x="670" y="51" style="font-size:12px">TG2</text>
+        <text class="topo-val" id="tv-tg2" x="670" y="74" style="font-size:10px">19.86 MW</text>
+        <!-- Línea TG2 → Hub -->
+        <path class="topo-link" id="tk-tg2" d="M670,62 L670,120 Q670,130 660,130 L415,130"/>
+        <path class="topo-pulse" id="tp-tg2" d="M670,62 L670,120 Q670,130 660,130 L415,130" style="animation-delay:1.2s"/>
+      </svg>
+    </div>
+
+    <!-- Brand -->
+    <div class="ld-brand" id="ldBrand">
+      <div class="ld-eyebrow" id="ldEyebrow">ÍNDICE DE INDISPONIBILIDAD ENERGÉTICA</div>
+      <div class="ld-title" id="ldTitle">O&M — <em>GEN CHILE</em></div>
+      <div class="ld-rule" id="ldRule"></div>
+    </div>
+
+    <!-- Progress -->
+    <div class="ld-prog-wrap" id="ldProgWrap">
+      <div class="ld-progress"><div class="ld-progress-bar" id="ldProgressBar"></div></div>
+      <div class="ld-pct" id="ldPct">0%</div>
+    </div>
+
+    <!-- Status -->
+    <div class="ld-status-wrap" id="ldStatusWrap">
+      <div class="ld-dot"></div>
+      <span class="ld-status" id="ldStatus">Inicializando...</span>
+    </div>
+    <div class="ld-error" id="ldError" style="display:none"></div>
+    <button class="ld-retry" id="ldRetry" style="display:none" onclick="loadData()">↺ REINTENTAR</button>
+  </div>
+</div>
+
+<script>
+/* ══ CANVAS — Red de nodos flotantes ══ */
+(function(){
+  const cv=document.getElementById('ldCanvas');
+  const ctx=cv.getContext('2d');
+  let W,H,pts=[];
+  function resize(){W=cv.width=window.innerWidth;H=cv.height=window.innerHeight;init();}
+  function init(){
+    pts=[];const n=Math.min(Math.floor(W*H/18000),60);
+    for(let i=0;i<n;i++) pts.push({x:Math.random()*W,y:Math.random()*H,
+      vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.5+.5});
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(const p of pts){p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(245,166,35,.25)';ctx.fill();}
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<140){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);
+        ctx.strokeStyle=`rgba(245,166,35,${(.12*(1-d/140)).toFixed(3)})`;ctx.lineWidth=.5;ctx.stroke();}}
+    if(document.getElementById('loadingOverlay')?.style.display!=='none') requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize',resize);resize();draw();
+})();
+
+/* ══ SECUENCIA DE INICIALIZACIÓN ══ */
+(function(){
+  const seq=[
+    [300,  ()=>{
+      document.getElementById('ldTopo').classList.add('visible');
+      // Encender todo junto
+      ['tn-ctm3','tl-ctm3','tv-ctm3','tn-cta','tl-cta','tv-cta',
+       'tn-cth','tl-cth','tv-cth','tn-iem','tl-iem','tv-iem','tl-cem',
+       'tk-ctm3','tp-ctm3','tk-cta','tp-cta','tk-cth','tp-cth','tk-iem','tp-iem',
+       'tn-u16','tl-u16','tv-u16','tn-tg3','tl-tg3','tv-tg3',
+       'tn-tg1','tl-tg1','tv-tg1','tn-tg2','tl-tg2','tv-tg2','tl-cet',
+       'tk-u16','tp-u16','tk-tg3','tp-tg3','tk-tg1','tp-tg1','tk-tg2','tp-tg2',
+       'tn-hub','tl-hub','tl-hub2','tk-ind','tk-disp','tk-for'
+      ].forEach(id=>el(id,'on'));
+    }],
+    // Brand
+    [1200, ()=>{document.getElementById('ldBrand').classList.add('visible');}],
+    [1500, ()=>{el('ldEyebrow','on');document.getElementById('ldTitle').classList.add('on');}],
+    [1800, ()=>{document.getElementById('ldRule').classList.add('on');}],
+    // Progress + Status
+    [2100, ()=>{document.getElementById('ldProgWrap').classList.add('visible');
+               document.getElementById('ldStatusWrap').classList.add('visible');
+               document.getElementById('ldPct').classList.add('on');}],
+  ];
+  function el(id,cls){const e=document.getElementById(id);if(e)e.classList.add(cls);}
+  seq.forEach(([t,fn])=>setTimeout(fn,t));
+})();
+</script>
+
+<!-- DASHBOARD -->
+<div class="wrap" id="dashboard" style="display:none">
+
+<header>
+  <div>
+    <div class="h-tag">// Índice de Indisponibilidad Energética · O&M GEN Chile</div>
+    <h1>INDISPONIBILIDAD<br><span>O&M — GEN CHILE</span></h1>
+  </div>
+  <div class="h-right">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+      <span class="scope-badge" id="scopeBadge">FLOTA</span>
+      <div class="h-meta" id="hMeta"></div>
+    </div>
+    <div class="h-sync" id="syncBtn" onclick="loadData()">
+      <span class="sync-icon">↺</span>
+      <span id="syncLabel">Actualizar datos</span>
+    </div>
+    <div class="h-meta" id="lastUpdated"></div>
+  </div>
+</header>
+
+<div class="meth-box">
+  <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 24px;align-items:center;font-family:var(--mono);font-size:15px;line-height:1.7;width:100%;">
+    <span><b>DF:</b> E_ind = P_neta × h_evento</span>
+    <span style="color:#9ab0c0">Energía indisponible en salida forzada: potencia neta × horas fuera de servicio.</span>
+    <span><b>LF:</b> E_ind = (P_neta − Carga_Disp) × h_evento</span>
+    <span style="color:#9ab0c0">Energía no generada por limitación: diferencia de potencia × horas limitadas.</span>
+    <span><b>IND_u</b> = Σ E_ind / [P_neta × (HT − HPM)] × 100</span>
+    <span style="color:#9ab0c0">Índice por unidad: energía perdida sobre energía teórica disponible (excluye PM).</span>
+    <span><b>FOR</b> = HFO / (HFO + HS) × 100</span>
+    <span style="color:#9ab0c0">Forced Outage Rate: % de tiempo que la unidad falló sobre el tiempo que intentó operar.</span>
+  </div>
+  <div style="font-family:var(--mono);font-size:13px;color:#5a7a90;margin-top:10px;border-top:1px solid rgba(52,152,219,.15);padding-top:8px;">
+    Solapamiento: DF prevalece sobre LF (sweep-line) · Ref. IEEE Std 762 · <b id="repoLabel" style="color:#7a94a8"></b>
+  </div>
+</div>
+
+
+<div class="st">Indicadores <span class="st-sub" id="kpiSub"></span></div>
+<div id="kpiDetailWrap" style="display:none;"></div>
+<div id="kpiRowWrap">
+  <div class="kpi-row" id="kpiRow"></div>
+  <div class="st" id="kpiTodayBar" style="display:none">Al día de hoy <span class="st-sub" id="kpiTodayLbl" style="color:#f5a623"></span></div>
+  <div id="kpiTodayDetailWrap" style="display:none;"></div>
+  <div class="kpi-row kpi-row-today" id="kpiRowToday" style="display:none;margin-bottom:18px;"></div>
+</div>
+
+<div class="st">Unidades <span class="st-sub" id="cardsSub"></span></div>
+<div class="cards-wrap" id="cardsWrap"></div>
+
+<div class="st">Distribución del año <span class="st-sub" id="tlSub"></span></div>
+<div class="tl-wrap" id="tlWrap"></div>
+
+<div class="st">Programa de Mantenimientos <span class="st-sub" id="ganttSub"></span></div>
+<div class="chart-section" id="ganttSection">
+  <svg id="ganttSvg" width="100%" style="display:block;"></svg>
+  <div id="ganttSummary" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;align-items:center;"></div>
+</div>
+
+<div class="st">Indisponibilidad Energética Acumulada <span class="st-sub" id="cumSub"></span></div>
+<div class="chart-section" id="cumSection">
+  <svg id="cumChartSvg" width="100%" height="240" viewBox="0 0 1000 220" preserveAspectRatio="none"></svg>
+</div>
+
+<!-- Filtro de meses compartido -->
+<div class="st" id="kpiMonthBar" style="display:none">Análisis Mensual <span class="st-sub" id="kpiMonthLbl"></span></div>
+<div id="kpiMonthFilterWrap" style="display:none"></div>
+<div id="kpiMonthDetailWrap" style="display:none;"></div>
+<div id="kpiRowMonth" style="display:none"></div>
+<div id="kpiMonthTodayBar" style="display:none"></div>
+<div id="kpiMonthTodayLbl" style="display:none"></div>
+<div id="kpiMonthTodayDetailWrap" style="display:none;"></div>
+<div id="kpiRowMonthToday" style="display:none"></div>
+
+<!-- Sección mensual integrada -->
+<div class="month-section" id="monthSection" style="display:none;">
+  <!-- Tabs de meses -->
+  <div class="month-tabs" id="monthTabs"></div>
+  <!-- Contenido mensual -->
+  <div id="monthContent"></div>
+</div>
+
+<div class="st">Indisponibilidad Energética Mensual <span class="st-sub" id="chartSub"></span></div>
+<div class="chart-section">
+  <div style="display:none;">
+    <button id="mSelAll"></button>
+    <div id="mSelBtns"></div>
+  </div>
+  <!-- Barras anuales -->
+  <div id="chartAnnual">
+    <div class="chart-canvas-wrap"><div class="bars-wrap" id="barsWrap"></div></div>
+    <div class="chart-leg">
+      <div class="leg-i"><div class="leg-d" style="background:rgba(46,204,113,.5);border:1px solid rgba(46,204,113,.6)"></div>Disponible (DISP)</div>
+      <div class="leg-i"><div class="leg-d" style="background:rgba(52,152,219,.65);border:1px solid rgba(52,152,219,.75)"></div>Mant. Prog. (PM)</div>
+      <div class="leg-i"><div class="leg-d" style="background:rgba(245,166,35,.75);border:1px solid rgba(245,166,35,.85)"></div>Limitación (LF)</div>
+      <div class="leg-i"><div class="leg-d" style="background:rgba(231,76,60,.8);border:1px solid rgba(231,76,60,.9)"></div>Sal. Forzada (DF)</div>
+      <div class="leg-i" style="margin-left:auto;color:var(--muted);font-size:10px">Número = IND. energética mensual (%)</div>
+    </div>
+  </div>
+  <!-- Gantt mensual detalle -->
+  <div id="chartMonthDetail" style="display:none;"></div>
+</div>
+
+<div class="st">Tabla Resumen <span class="st-sub" id="tableSub"></span></div>
+<div class="evtab-wrap">
+  <table>
+    <thead><tr>
+      <th style="width:7%;text-align:left">Unidad</th>
+      <th style="width:6%">Central</th>
+      <th style="width:7%">P.Neta<br>(MW)</th>
+      <th style="width:10%">E. Teórica<br>(MWh)</th>
+      <th style="width:10%">E. Indisponible<br>(MWh)</th>
+      <th style="width:8%">H. Sal.<br>Forzada</th>
+      <th style="width:8%">H. Limi-<br>tación</th>
+      <th style="width:8%">H. Mant.<br>Prog.</th>
+      <th style="width:9%">Indispo-<br>nibilidad</th>
+      <th style="width:9%">Disponi-<br>bilidad</th>
+      <th style="width:6%" title="Forced Outage Rate&#10;HFO / (HFO + HS) × 100&#10;Fallas imprevistas / (Fallas + Servicio)&#10;No incluye LF ni PM" style="cursor:help">FOR ⓘ</th>
+      <th style="width:5%">N°<br>DF</th>
+      <th style="width:5%">N°<br>LF</th>
+      <th style="width:5%">N°<br>PM</th>
+    </tr></thead>
+    <tbody id="summaryBody"></tbody>
+    <tfoot id="summaryFoot"></tfoot>
+  </table>
+</div>
+
+<div class="st">Eventos por Energía Indisponible <span class="st-sub" id="evtSub"></span></div>
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+  <span style="font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:1px;">MOSTRAR</span>
+  <div style="display:flex;gap:0;border:1px solid var(--bhi);border-radius:3px;overflow:hidden;">
+    <button class="ev-sort-btn active" id="evtShowTop" onclick="setEvShow('top')" style="border-radius:0;border:none;border-right:1px solid var(--bhi);">TOP 5</button>
+    <button class="ev-sort-btn" id="evtShowAll" onclick="setEvShow('all')" style="border-radius:0;border:none;">TODOS</button>
+  </div>
+  <span style="font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:1px;margin-left:6px;">ORDENAR POR</span>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;" id="evtSortBtns">
+    <button class="ev-sort-btn active" data-sort="e" onclick="setEvSort('e')">Energía</button>
+    <button class="ev-sort-btn" data-sort="d" onclick="setEvSort('d')">Duración</button>
+    <button class="ev-sort-btn" data-sort="i" onclick="setEvSort('i')">Fecha inicio</button>
+  </div>
+  <button id="evtDirBtn" onclick="toggleEvDir()" style="
+    font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:1px;
+    padding:6px 14px;background:transparent;color:#8fafc2;
+    border:1px solid var(--bhi);cursor:pointer;border-radius:3px;transition:all .18s;
+  ">↓ DESC</button>
+</div>
+<div class="topev-grid" id="topevGrid"></div>
+
+<div class="foot">
+  IND_u = Σ(P_ind × h) / [P_neta × (HT − HPM)] × 100 &nbsp;·&nbsp;
+  DF: P_ind = P_neta &nbsp;·&nbsp; LF: P_ind = P_neta − Carga_Disp<br>
+  Solapamiento: DF prevalece sobre LF en el mismo intervalo (sweep-line)<br>
+  IND_central / IND_flota = Σ E_ind / Σ E_teo × 100 &nbsp;·&nbsp; Ref. IEEE Std 762
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;gap:10px;">
+    <span style="font-family:var(--mono);font-size:13px;color:var(--border)">────────────────</span>
+    <span style="font-family:var(--head);font-size:18px;font-weight:900;letter-spacing:4px;color:var(--bhi)">BY</span>
+    <span style="font-family:var(--head);font-size:22px;font-weight:900;letter-spacing:6px;
+      background:linear-gradient(135deg,var(--accent),#fff);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;">SLA</span>
+  </div>
+</div>
+</div><!-- /wrap -->
+
+<!-- Tooltip Gantt -->
+<div id="ganttTooltip" style="
+  display:none;position:fixed;z-index:200;
+  background:rgba(7,9,13,0.97);border:1px solid var(--accent);
+  padding:8px 14px;border-radius:3px;pointer-events:none;
+  font-family:var(--mono);font-size:13px;color:#e0eef8;
+  max-width:260px;line-height:1.6;
+  box-shadow:0 4px 20px rgba(0,0,0,.6);
+"></div>
+
+<!-- SIDEBAR FIJO -->
+<div class="sidebar" id="sidebar">
+  <div class="sb-section">
+    <div class="sb-lbl">AÑO</div>
+    <div class="sb-pills" id="yrSel"></div>
+  </div>
+  <div class="sb-divider"></div>
+  <!-- VISTA + UNIDADES en fila -->
+  <div id="vistaPanelWrap" style="width:100%;display:flex;gap:5px;">
+    <div class="sb-section" style="flex:1;min-width:0;">
+      <div class="sb-lbl">VISTA</div>
+      <div class="sb-pills" id="scopeSel"></div>
+    </div>
+    <div class="sb-section" id="unitPanel" style="flex:1;min-width:0;display:none;">
+      <div class="sb-lbl">UNIDAD</div>
+      <div class="sb-pills" id="unitSel"></div>
+    </div>
+  </div>
+  <div class="sb-divider"></div>
+  <div class="sb-section">
+    <div class="sb-lbl">EVENTOS</div>
+    <div class="sb-pills">
+      <button class="pill sb-toggle" id="toggleBoth" onclick="setEvFilter('both')">DF+LF</button>
+      <button class="pill sb-toggle" id="toggleDF"   onclick="setEvFilter('df')">DF</button>
+      <button class="pill sb-toggle" id="toggleLF"   onclick="setEvFilter('lf')">LF</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════
+   CONFIG — repositorio público (sin token)
+═══════════════════════════════════════════ */
+const CONFIG = {
+  repo  : 'auxchecho/gen-cl-indisponibilidad',
+  file  : 'Base_Dato_Indisponibilidad_GEN_CL.xlsx'
+};
+
+/* ═══ CONSTANTES ═══ */
+const SITE_MAP={CTM3:'CEM',CTA:'CEM',CTH:'CEM',IEM:'CEM',CTM1:'CEM',CTM2:'CEM',U16:'CET',TG3:'CET',TG1:'CET',TG2:'CET'};
+const CEM=['CTM3','CTA','CTH','IEM','CTM1','CTM2'];
+const CET=['U16','TG3','TG1','TG2'];
+const ALL=[...CEM,...CET];
+const MONTHS=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+const YEARS=[2023,2024,2025,2026];
+
+/* ═══ ESTADO ═══ */
+let DATA=null, PNET={};
+let selYear='2025',selScope='flota',selUnit='CTM3',selChartUnit=null;
+let evFilter='both';
+let evSort='e', evDir='desc', evShow='top';
+let selMonth=null;
+let selKPI=null; // null = todas las tarjetas | 'ind'|'disp'|'eind'|'for'|'units'
+let selKPIToday=null; // mismo pero para fila "Al día de hoy"
+let prevScope='flota'; // scope anterior para botón volver en tarjeta unidad
+let selKPIMonth=null; // KPI detalle mensual
+let selKPIMonthToday=null; // KPI detalle "al día de hoy" del mes
+let selMonthKPI=null; // mes seleccionado para KPIs mensuales (0-11, null=mes actual)
+let RAW={allEvents:[],allPM:[],vigency:{}}; // datos crudos para recalcular al filtrar
+
+/* ═══════════════════════════════════════════
+   FETCH DESDE GITHUB (repo público, sin token)
+═══════════════════════════════════════════ */
+async function fetchExcel(){
+  setStatus('Descargando archivo desde GitHub...');
+
+  // Método 1: Descarga directa via raw.githubusercontent (sin límite de API)
+  const rawUrl=`https://raw.githubusercontent.com/${CONFIG.repo}/main/${encodeURIComponent(CONFIG.file)}`;
+  try {
+    const resp=await fetch(rawUrl);
+    if(resp.ok){
+      setStatus('Procesando archivo Excel...');
+      const bytes=new Uint8Array(await resp.arrayBuffer());
+      fetchLastUpdate();
+      return XLSX.read(bytes,{type:'array',cellDates:true});
+    }
+  } catch(e){ console.warn('Método raw falló:', e.message); }
+
+  // Método 2: API de GitHub (fallback, tiene límite de 60 req/hora sin token)
+  setStatus('Intentando método alternativo...');
+  const apiUrl=`https://api.github.com/repos/${CONFIG.repo}/contents/${encodeURIComponent(CONFIG.file)}`;
+  const resp=await fetch(apiUrl,{headers:{Accept:'application/vnd.github.v3+json'}});
+  if(!resp.ok) throw new Error(`GitHub API: ${resp.status} — Verifica que el repositorio sea público.`);
+  const info=await resp.json();
+
+  setStatus('Procesando archivo Excel...');
+  let bytes;
+  if(info.content){
+    const bin=atob(info.content.replace(/\n/g,''));
+    bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  } else if(info.download_url){
+    const r=await fetch(info.download_url);
+    bytes=new Uint8Array(await r.arrayBuffer());
+  } else {
+    throw new Error('Archivo no disponible.');
+  }
+  fetchLastUpdate();
+  return XLSX.read(bytes,{type:'array',cellDates:true});
+}
+
+/* Obtener fecha de última actualización */
+function fetchLastUpdate(){
+  const commitUrl=`https://api.github.com/repos/${CONFIG.repo}/commits?path=${encodeURIComponent(CONFIG.file)}&per_page=1`;
+  fetch(commitUrl)
+    .then(r=>r.json()).then(commits=>{
+      if(commits[0]){
+        const d=new Date(commits[0].commit.committer.date);
+        document.getElementById('lastUpdated').innerHTML=`Última actualización: <b>${d.toLocaleString('es-CL')}</b>`;
+      }
+    }).catch(()=>{});
+}
+
+/* ═══════════════════════════════════════════
+   PARSE WORKBOOK
+═══════════════════════════════════════════ */
+function rows(wb,sheet){
+  const ws=wb.Sheets[sheet];
+  if(!ws) throw new Error(`Hoja "${sheet}" no encontrada en el archivo.`);
+  return XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+}
+
+function toMs(v){
+  if(!v) return null;
+  if(v instanceof Date) return v.getTime();
+  if(typeof v==='number'){
+    const d=new Date(Math.round((v-25569)*86400*1000));
+    return d.getTime();
+  }
+  const d=new Date(v);
+  return isNaN(d)?null:d.getTime();
+}
+
+function parseEvents(wb){
+  const data=rows(wb,'BASE_DATOS_EVENTOS_GEN_CHILE');
+  const hi=data.findIndex(r=>r&&r[0]==='ID');
+  if(hi<0) throw new Error('No se encontró encabezado en la hoja de eventos.');
+  return data.slice(hi+1)
+    .filter(r=>r&&r[0]&&!isNaN(parseInt(r[0]))&&r[4])
+    .map(r=>({
+      id:parseInt(r[0]),
+      unidad:String(r[1]||''),
+      carga:parseFloat(r[3])||0,
+      op:String(r[4]||''),
+      start:toMs(r[5]),
+      end:toMs(r[6]),
+      motivo:String(r[7]||''),
+      detalle:String(r[8]||'')
+    }))
+    // Duración mínima 1 minuto para descartar eventos de duración espuria
+    .filter(e=>ALL.includes(e.unidad)&&e.start&&e.end&&(e.end-e.start)>=60000);
+}
+
+function parsePower(wb){
+  const data=rows(wb,'POTENCIA_BRUTA_NETA_GEN_CHILE');
+  const result={};
+  data.slice(1).forEach(r=>{
+    if(r&&r[0]) result[String(r[0])]={bruta:parseFloat(r[2])||0,neta:parseFloat(r[3])||0};
+  });
+  return result;
+}
+
+function parseMaintenance(wb){
+  const data=rows(wb,'Mantenimientos_Programados');
+  return data.slice(1)
+    .filter(r=>r&&r[0]&&r[1]&&r[2])
+    .map(r=>({unidad:String(r[0]),start:toMs(r[1]),end:toMs(r[2]),motivo:String(r[4]||'')}))
+    .filter(m=>ALL.includes(m.unidad)&&m.start&&m.end&&m.end>m.start);
+}
+
+function parseVigency(wb){
+  const data=rows(wb,'Vigencia_Unidades');
+  const result={};
+  data.slice(1).forEach(r=>{
+    if(r&&r[0]) result[String(r[0])]={start:toMs(r[1]),end:toMs(r[2])};
+  });
+  return result;
+}
+
+/* ═══════════════════════════════════════════
+   CÁLCULO SWEEP-LINE (corrección solapamiento)
+   En cada instante: DF prevalece sobre LF
+   → E_ind nunca supera E_teo
+═══════════════════════════════════════════ */
+function sweepEnergy(events, psMs, peMs, Pneta){
+  // events: [{start,end,op,carga}] ya filtrados por unidad
+  const clipped=events.map(e=>({
+    ...e,
+    start:Math.max(e.start,psMs),
+    end  :Math.min(e.end,  peMs)
+  // Descartar si el recorte al período deja una duración < 1 minuto
+  })).filter(e=>e.end-e.start>=60000);
+
+  if(!clipped.length) return {eInd:0,hFO:0,hLF:0,hHS:0};
+
+  // Puntos de corte
+  const pts=new Set([psMs,peMs]);
+  clipped.forEach(e=>{pts.add(e.start);pts.add(e.end);});
+  const sorted=[...pts].sort((a,b)=>a-b);
+
+  let eInd=0,hFO=0,hLF=0;
+  for(let i=0;i<sorted.length-1;i++){
+    const t0=sorted[i],t1=sorted[i+1];
+    const mid=(t0+t1)/2;
+    const dt=(t1-t0)/3600000; // horas
+
+    const active=clipped.filter(e=>e.start<=mid&&e.end>mid);
+    if(!active.length) continue;
+
+    const dfs=active.filter(e=>e.op==='DF');
+    let pInd;
+    if(dfs.length>0){
+      pInd=Pneta;
+      hFO+=dt;
+    } else {
+      pInd=Math.max(...active.map(e=>Math.max(Pneta-e.carga,0)));
+      if(pInd>0) hLF+=dt;
+    }
+    eInd+=pInd*dt;
+  }
+  const hHS=Math.max((peMs-psMs)/3600000-hFO-hLF,0);
+  return {eInd,hFO,hLF,hHS};
+}
+
+function unionHoursMs(intervals, psMs, peMs){
+  const cl=intervals.map(i=>({s:Math.max(i.start,psMs),e:Math.min(i.end,peMs)}))
+    .filter(i=>i.e>i.s).sort((a,b)=>a.s-b.s);
+  if(!cl.length) return 0;
+  const merged=[cl[0]];
+  for(let i=1;i<cl.length;i++){
+    const last=merged[merged.length-1];
+    if(cl[i].s<=last.e) last.e=Math.max(last.e,cl[i].e);
+    else merged.push(cl[i]);
+  }
+  return merged.reduce((s,i)=>s+(i.e-i.s)/3600000,0);
+}
+
+/* ═══════════════════════════════════════════
+   CALCULAR AÑO
+═══════════════════════════════════════════ */
+function calcYear(year, allEvents, allPM, vigency){
+  const PS=new Date(year,0,1,0,0,0).getTime();
+  const PE=new Date(year,11,31,23,59,59,999).getTime();
+  const HT=(PE-PS)/3600000;
+
+  const annual={}, monthly={}, events={};
+
+  for(const u of ALL){
+    const Pn=PNET[u]||0;
+    // Vigency
+    const v=vigency[u];
+    let uStart=PS,uEnd=PE;
+    if(v){
+      uStart=Math.max(PS,v.start||PS);
+      uEnd=Math.min(PE,v.end||PE);
+    }
+    if(uStart>=uEnd){
+      annual[u]={ind:null,disp:null,for:0,hfo:0,hlf:0,hpm:0,hs:0,htotal:0,
+                 n_fo:0,n_lf:0,n_pm:0,ht:HT,active:false,eInd:0,eTeo:0,pnet:Pn,topEvs:[]};
+      monthly[u]=Array(12).fill(null);
+      events[u]=[];
+      continue;
+    }
+    const htEff=(uEnd-uStart)/3600000;
+
+    // PM
+    const pmU=allPM.filter(m=>m.unidad===u);
+    const hpm=unionHoursMs(pmU,uStart,uEnd);
+    const nPm=pmU.filter(m=>Math.min(m.end,uEnd)>Math.max(m.start,uStart)).length;
+
+    // Energy denominator
+    const htAvailAnn=htEff-hpm;
+    const denom=Pn*htAvailAnn;
+
+    // Events clipped al período efectivo
+    const uEvs=allEvents.filter(e=>e.unidad===u);
+    const uEvsInPeriod=uEvs.filter(e=>Math.min(e.end,uEnd)-Math.max(e.start,uStart)>=60000);
+
+    // Sweep-line for annual — si no hay eventos reales, eInd=0 (evita error de precisión)
+    let eInd=0, hFO=0, hLF=0, hHS=htAvailAnn;
+    if(uEvsInPeriod.length>0){
+      const sw=sweepEnergy(uEvs,uStart,uEnd,Pn);
+      eInd=sw.eInd; hFO=sw.hFO; hLF=sw.hLF; hHS=sw.hHS;
+    }
+    // Si el período efectivo es < 1h (todo mantenimiento), ind=0
+    const ind=denom>0&&htAvailAnn>=1?Math.min(eInd/denom*100,100):0;
+    const disp=100-ind;
+    const forR=hFO>0?hFO/(hFO+hHS)*100:0;
+
+    // Count distinct DF/LF event groups (merged intervals)
+    const dfEvs=uEvs.filter(e=>e.op==='DF'&&Math.min(e.end,uEnd)>Math.max(e.start,uStart));
+    const lfEvs=uEvs.filter(e=>e.op==='LF'&&Math.min(e.end,uEnd)>Math.max(e.start,uStart));
+
+    annual[u]={
+      ind:round2(ind),disp:round2(disp),for:round2(forR),
+      hfo:round1(hFO),hlf:round1(hLF),hpm:round1(hpm),
+      hs:round1(hHS),htotal:round1(hFO+hLF+hpm),
+      n_fo:dfEvs.length,n_lf:lfEvs.length,n_pm:nPm,
+      ht:round1(htEff),active:true,
+      eInd:round0(eInd),eTeo:round0(denom),pnet:Pn,
+      topEvs:[]
+    };
+
+    // Todos los eventos del período, ordenados por energía desc
+    const evDetails=uEvs
+      .filter(e=>Math.min(e.end,uEnd)>Math.max(e.start,uStart))
+      .map(e=>{
+        const es=Math.max(e.start,uStart), ee=Math.min(e.end,uEnd);
+        const dur=(ee-es)/3600000;
+        const pInd=e.op==='DF'?Pn:Math.max(Pn-e.carga,0);
+        return {op:e.op,i:fmtDate(es),f:fmtDate(ee),
+                iDT:fmtDateTime(es),fDT:fmtDateTime(ee),
+                d:round2(dur),p:round1(pInd),
+                e:round0(pInd*dur),eRaw:pInd*dur,
+                motivo:e.motivo||'',detalle:e.detalle||''};
+      })
+      .filter(e=>e.e>0&&e.d>=0.02)
+      .sort((a,b)=>b.e-a.e);
+    annual[u].topEvs=evDetails;
+
+    // Puntos acumulados para gráfico de indisponibilidad acumulada
+    // Muestrea en 183 puntos (bi-diario) usando sweep-line
+    const cumPts=buildCumulativePtsPN(uEvs,pmU,uStart,uEnd,Pn);
+    annual[u].cumPts=cumPts;
+
+    // Monthly — guardar desglose completo por mes
+    const mo=[];
+    for(let m=0;m<12;m++){
+      const ms=new Date(year,m,1).getTime();
+      const me=new Date(year,m+1,1).getTime();
+      const ms2=Math.max(ms,uStart), me2=Math.min(me,uEnd);
+      if(ms2>=me2){mo.push(null);continue;}
+      const htM=(me2-ms2)/3600000;
+      const hpmM=unionHoursMs(pmU,ms2,me2);
+      const denomM=Pn*(htM-hpmM);
+      const {eInd:eM,hFO:hfoM,hLF:hlfM}=sweepEnergy(uEvs,ms2,me2,Pn);
+      const htAvail=htM-hpmM;
+      const hsDispM=Math.max(htM-hpmM-hfoM-hlfM,0);
+      const fullPM=(htAvail<1||denomM<=0);
+      // Segmentos cronológicos para visualización
+      const segs=buildMonthSegments(uEvs,pmU,ms2,me2);
+      mo.push({
+        ht:round1(htM),
+        hfo:round1(hfoM), hlf:round1(hlfM),
+        hpm:round1(hpmM), hs:round1(hsDispM),
+        eTeo:round0(denomM),
+        ind: fullPM?'PM':round2(Math.min(eM/denomM*100,100)),
+        segs
+      });
+    }
+    monthly[u]=mo;
+    events[u]=evDetails;
+  }
+
+  return {annual,monthly,events,ht:round1(HT)};
+}
+
+/* ═══════════════════════════════════════════
+   INDISPONIBILIDAD ACUMULADA
+   Genera puntos {x:0-1, y:0-100%} cronológicos
+   usando sweep-line sobre los eventos reales.
+═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   INDISPONIBILIDAD ACUMULADA — un solo paso
+   Acumula energía indisponible recorriendo
+   los intervalos del sweep-line una sola vez.
+═══════════════════════════════════════════ */
+function buildCumulativePtsPN(uEvs,pmU,uStart,uEnd,Pn){
+  if(!Pn||uEnd<=uStart) return [{x:0,y:0,eInd:0,eTeo:0}];
+  const dur=uEnd-uStart;
+  const evs=uEvs.map(e=>({
+    s:Math.max(e.start,uStart),e:Math.min(e.end,uEnd),
+    op:e.op,carga:e.carga
+  })).filter(e=>e.e>e.s);
+  const bpts=new Set([uStart,uEnd]);
+  evs.forEach(e=>{bpts.add(e.s);bpts.add(e.e);});
+  for(let m=1;m<12;m++) bpts.add(uStart+dur*m/12);
+  // Añadir también límites de PM para precisión
+  pmU.forEach(p=>{
+    if(p.start>uStart&&p.start<uEnd) bpts.add(p.start);
+    if(p.end>uStart&&p.end<uEnd) bpts.add(p.end);
+  });
+  const sorted=[...bpts].sort((a,b)=>a-b);
+  let accEInd=0;
+  const pts=[{x:0,y:0,eInd:0,eTeo:0}];
+  for(let i=0;i<sorted.length-1;i++){
+    const t0=sorted[i],t1=sorted[i+1],mid=(t0+t1)/2;
+    const dt=(t1-t0)/3600000;
+    const active=evs.filter(e=>e.s<=mid&&e.e>mid);
+    const dfs=active.filter(e=>e.op==='DF');
+    let pInd=0;
+    if(dfs.length>0) pInd=Pn;
+    else if(active.length>0) pInd=Math.max(...active.map(e=>Math.max(Pn-e.carga,0)));
+    accEInd+=pInd*dt;
+    // Denominador = energía teórica transcurrida hasta t1 (sin PM)
+    const elapsedH=(t1-uStart)/3600000;
+    const pmH=unionHoursMs(pmU,uStart,t1);
+    const eTeoEl=Pn*Math.max(elapsedH-pmH,0);
+    const x=round2((t1-uStart)/dur);
+    const y=eTeoEl>0?round2(Math.min(accEInd/eTeoEl*100,100)):0;
+    pts.push({x,y,eInd:round2(accEInd),eTeo:round2(eTeoEl)});
+  }
+  return pts;
+}
+/* ═══════════════════════════════════════════
+   Genera bloques ordenados en el tiempo para
+   la visualización de barras apiladas.
+   Prioridad solapamiento: DF > LF > PM > DISP
+═══════════════════════════════════════════ */
+function buildMonthSegments(uEvs, pmU, ms2, me2){
+  const dfEvs=uEvs.filter(e=>e.op==='DF')
+    .map(e=>({s:Math.max(e.start,ms2),e:Math.min(e.end,me2),type:'fo'}))
+    .filter(e=>e.e>e.s);
+  const lfEvs=uEvs.filter(e=>e.op==='LF')
+    .map(e=>({s:Math.max(e.start,ms2),e:Math.min(e.end,me2),type:'lf'}))
+    .filter(e=>e.e>e.s);
+  const pmEvs=pmU
+    .map(e=>({s:Math.max(e.start,ms2),e:Math.min(e.end,me2),type:'pm'}))
+    .filter(e=>e.e>e.s);
+
+  const all=[...dfEvs,...lfEvs,...pmEvs];
+
+  // Puntos de corte en el mes
+  const pts=new Set([ms2,me2]);
+  all.forEach(e=>{pts.add(e.s);pts.add(e.e);});
+  const sorted=[...pts].sort((a,b)=>a-b);
+
+  const segs=[];
+  for(let i=0;i<sorted.length-1;i++){
+    const t0=sorted[i],t1=sorted[i+1];
+    const mid=(t0+t1)/2;
+    const pct=(t1-t0)/(me2-ms2)*100;
+    const active=all.filter(e=>e.s<=mid&&e.e>mid);
+    let type='hs';
+    if(active.some(e=>e.type==='fo'))      type='fo';
+    else if(active.some(e=>e.type==='lf')) type='lf';
+    else if(active.some(e=>e.type==='pm')) type='pm';
+    // Fusionar con segmento anterior si mismo tipo
+    if(segs.length>0&&segs[segs.length-1].type===type) segs[segs.length-1].pct+=pct;
+    else segs.push({type,pct:round2(pct)});
+  }
+  return segs;
+}
+function round2(v){return Math.round(v*100)/100;}
+function round1(v){return Math.round(v*10)/10;}
+function round0(v){return Math.round(v);}
+function fmtDate(ms){const d=new Date(ms);return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;}
+function fmtDateTime(ms){const d=new Date(ms);return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+
+async function loadData(){
+  const overlay=document.getElementById('loadingOverlay');
+  overlay.style.display='flex';
+  overlay.classList.remove('dismiss');
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('ldError').style.display='none';
+  document.getElementById('ldRetry').style.display='none';
+  setProgress(0);
+
+  // Marcar inicio para garantizar tiempo mínimo de animación
+  const animStart=Date.now();
+  const MIN_ANIM_TIME=4000; // 4s mínimo para que la animación se complete
+
+  try {
+    setProgress(10);
+    setStatus('Conectando con repositorio...');
+    const wb=await fetchExcel();
+    setProgress(45);
+    setStatus('Leyendo potencias netas...');
+
+    const power=parsePower(wb);
+    PNET={};
+    for(const [u,p] of Object.entries(power)) PNET[u]=p.neta;
+    setProgress(55);
+    setStatus('Procesando eventos DF / LF...');
+
+    RAW.allEvents=parseEvents(wb);
+    RAW.allPM=parseMaintenance(wb);
+    RAW.vigency=parseVigency(wb);
+    setProgress(70);
+    setStatus('Sweep-line solapamientos...');
+
+    await new Promise(r=>setTimeout(r,100)); // yield para repaint
+    recalcAll();
+    setProgress(88);
+    setStatus('Construyendo visualización...');
+
+    document.getElementById('repoLabel').textContent=CONFIG.repo;
+
+    const lastYearWithData=YEARS.slice().reverse().find(y=>{
+      const an=DATA[String(y)].annual;
+      return Object.values(an).some(d=>d.active&&(d.n_fo>0||d.n_lf>0||d.n_pm>0));
+    });
+    if(lastYearWithData) selYear=String(lastYearWithData);
+
+    // Esperar a que la animación mínima se complete antes de continuar
+    const elapsed=Date.now()-animStart;
+    if(elapsed<MIN_ANIM_TIME){
+      await new Promise(r=>setTimeout(r,MIN_ANIM_TIME-elapsed));
+    }
+
+    setProgress(100);
+    setStatus('Sistema operativo');
+
+    // Renderizar dashboard detrás del overlay
+    document.getElementById('dashboard').style.display='block';
+    render();
+
+    // 2s para apreciar el 100% y "Sistema operativo"
+    await new Promise(r=>setTimeout(r,2000));
+
+    // Transición cinematográfica de salida
+    overlay.classList.add('dismiss');
+    await new Promise(r=>setTimeout(r,900));
+    overlay.style.display='none';
+
+  } catch(err){
+    document.getElementById('ldError').style.display='block';
+    document.getElementById('ldError').textContent='Error: '+err.message;
+    document.getElementById('ldRetry').style.display='inline-block';
+    console.error(err);
+  }
+}
+
+function setStatus(msg){document.getElementById('ldStatus').textContent=msg;}
+function setProgress(pct){
+  const bar=document.getElementById('ldProgressBar');if(bar)bar.style.width=pct+'%';
+  const lbl=document.getElementById('ldPct');if(lbl)lbl.textContent=pct+'%';
+}
+
+function recalcAll(){
+  const filtered=RAW.allEvents.filter(e=>{
+    if(e.op==='DF'&&evFilter==='lf') return false;
+    if(e.op==='LF'&&evFilter==='df') return false;
+    return true;
+  });
+  DATA={};
+  for(const year of YEARS){
+    DATA[String(year)]=calcYear(year,filtered,RAW.allPM,RAW.vigency);
+  }
+}
+
+function setEvFilter(f){ evFilter=f; recalcAll(); render(); }
+
+function setEvSort(s){
+  evSort=s;
+  document.querySelectorAll('.ev-sort-btn[data-sort]').forEach(b=>b.classList.toggle('active',b.dataset.sort===s));
+  renderEvents(scopeUnits(),selYear);
+}
+
+function toggleEvDir(){
+  evDir=evDir==='desc'?'asc':'desc';
+  const btn=document.getElementById('evtDirBtn');
+  if(btn) btn.textContent=evDir==='desc'?'↓ DESC':'↑ ASC';
+  renderEvents(scopeUnits(),selYear);
+}
+
+function setEvShow(s){
+  evShow=s;
+  document.getElementById('evtShowTop').classList.toggle('active', s==='top');
+  document.getElementById('evtShowAll').classList.toggle('active', s==='all');
+  renderEvents(scopeUnits(),selYear);
+}
+
+/* ═══════════════════════════════════════════
+   HELPERS UI
+═══════════════════════════════════════════ */
+const f=(n,d=1)=>n==null?'—':n.toLocaleString('es',{minimumFractionDigits:d,maximumFractionDigits:d});
+const vc=v=>v==null?'v-na':v>=30?'v-crit':v>=5?'v-warn':'v-ok';
+const mc=v=>v>=30?'red':v>=5?'ora':'grn';
+const cls=v=>v==null?'inactive':v>=30?'crit':v>=5?'warn':'ok';
+const bc=v=>v==null?'b-na':v>=30?'b-crit':v>=5?'b-warn':'b-ok';
+const lbl=v=>v==null?'INACTIVO':v>=30?'CRÍTICO':v>=5?'ATENCIÓN':'NORMAL';
+const barC=v=>v>=30?'var(--red)':v>=5?'var(--accent)':'var(--green)';
+
+function scopeUnits(){
+  if(selScope==='flota') return ALL;
+  if(selScope==='cem')   return CEM;
+  if(selScope==='cet')   return CET;
+  return [selUnit];
+}
+
+function fleetInd(units,year){
+  const an=DATA[year].annual;
+  let tE=0,tT=0,tHFO=0,tHS=0,tHLF=0,tHPM=0,n=0;
+  units.forEach(u=>{
+    const d=an[u];
+    if(!d.active||!d.eTeo) return;
+    tE+=d.eInd; tT+=d.eTeo; tHFO+=d.hfo; tHS+=d.hs; tHLF+=d.hlf; tHPM+=d.hpm; n++;
+  });
+  if(!n||!tT) return {ind:0,disp:100,for:0,eind:0,eteo:0,n};
+  const ind=Math.min(tE/tT*100,100),disp=100-ind,forF=tHFO/(tHFO+tHS)*100||0;
+  return {ind,disp,for:forF,eind:tE,eteo:tT,tHFO,tHS,tHLF,tHPM,n};
+}
+
+/* ═══════════════════════════════════════════
+   BUILD CONTROLS
+═══════════════════════════════════════════ */
+function buildControls(){
+  const yr=document.getElementById('yrSel'); yr.innerHTML='';
+  YEARS.forEach(y=>{
+    const b=document.createElement('button');
+    b.className='pill yr'+(String(y)===selYear?' active':'');
+    b.textContent=y; b.onclick=()=>{selYear=String(y);selMonth=null;selKPI=null;selKPIToday=null;selKPIMonth=null;selKPIMonthToday=null;selMonthKPI=null;render();}; yr.appendChild(b);
+  });
+
+  const sc=document.getElementById('scopeSel'); sc.innerHTML='';
+  [{k:'flota',l:'FLOTA'},{k:'cem',l:'CEM'},{k:'cet',l:'CET'},{k:'unit',l:'UNIDAD'}].forEach(s=>{
+    const b=document.createElement('button');
+    b.className='pill scope-'+s.k+(selScope===s.k?' active':'');
+    b.textContent=s.l; b.onclick=()=>{selScope=s.k;selKPIToday=null;if(s.k==='unit')selChartUnit=selUnit;render();}; sc.appendChild(b);
+  });
+
+  const unitPanel=document.getElementById('unitPanel');
+  const uSel=document.getElementById('unitSel');
+  const sidebar=document.getElementById('sidebar');
+  const wrapEl=document.getElementById('dashboard');
+
+  if(selScope==='unit'){
+    unitPanel.style.display='flex';
+    sidebar.classList.add('expanded');
+    wrapEl.classList.add('expanded');
+    uSel.innerHTML='';
+    const an=DATA[selYear]?.annual||{};
+    const vigentUnits=ALL.filter(u=>!an[u]||an[u].active);
+    if(an[selUnit]&&!an[selUnit].active) selUnit=vigentUnits[0]||ALL[0];
+    vigentUnits.forEach(u=>{
+      const b=document.createElement('button');
+      b.className='pill scope-unit'+(u===selUnit?' active':'');
+      b.textContent=u; b.onclick=()=>{selUnit=u;selChartUnit=u;render();}; uSel.appendChild(b);
+    });
+  } else {
+    unitPanel.style.display='none';
+    sidebar.classList.remove('expanded');
+    wrapEl.classList.remove('expanded');
+  }
+  // Reflejar estado de toggles radio-style
+  const btnBoth=document.getElementById('toggleBoth');
+  const btnDF  =document.getElementById('toggleDF');
+  const btnLF  =document.getElementById('toggleLF');
+  if(btnBoth) btnBoth.className='pill sb-toggle'+(evFilter==='both'?' active-both':' inactive');
+  if(btnDF)   btnDF.className  ='pill sb-toggle'+(evFilter==='df'  ?' active-df'  :' inactive');
+  if(btnLF)   btnLF.className  ='pill sb-toggle'+(evFilter==='lf'  ?' active-lf'  :' inactive');
+}
+function render(){
+  buildControls();
+  const year=selYear,D=DATA[year],an=D.annual,HT=D.ht;
+  const units=scopeUnits();
+  const isPartial=year==='2026';
+  const scopeNames={flota:'FLOTA COMPLETA',cem:'CENTRAL CEM',cet:'CENTRAL CET',unit:selUnit+' ('+SITE_MAP[selUnit]+')'};
+  const sbCls={flota:'sb-flota',cem:'sb-cem',cet:'sb-cet',unit:'sb-unit'};
+
+  document.getElementById('scopeBadge').textContent=scopeNames[selScope];
+  document.getElementById('scopeBadge').className='scope-badge '+sbCls[selScope];
+  document.getElementById('hMeta').innerHTML=`PERÍODO: <b>01-ENE-${year} → ${isPartial?'11-ABR':'31-DIC'}-${year}${isPartial?' (parcial)':''}</b><br>HT BASE: <b>${HT.toLocaleString('es')} h/año</b>`;
+  const sub=`· ${scopeNames[selScope]} · ${year}`;
+  ['kpiSub','cardsSub','tlSub','ganttSub','cumSub','chartSub','tableSub','evtSub'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=sub;});
+
+  renderKPIs(units,year);
+  renderKPIMonth(units,year);
+  renderCards(units,year);
+  renderTimeline(units,year);
+  renderGantt(units,year);
+  renderCumChart(year);
+  renderChartSection(units,year);
+  renderTable(units,year);
+  renderEvents(units,year);
+}
+
+function renderKPIDetail(kpi,units,year,f2,n){
+  const an=DATA[year].annual;
+  const activeUnits=units.filter(u=>an[u].active&&an[u].eTeo>0);
+  const f3=(v,d=2)=>v==null?'—':f(v,d);
+
+  const BACK=`<button class="kpi-detail-back" onclick="selKPI=null;renderKPIs(scopeUnits(),selYear)">← Volver</button>`;
+
+  if(kpi==='ind'||kpi==='disp'){
+    const title=kpi==='ind'?'Indisponibilidad Energética':'Disponibilidad Energética';
+    const col=kpi==='ind'?'k1':'k4';
+    const result=kpi==='ind'?f2.ind.toFixed(4)+'%':f2.disp.toFixed(4)+'%';
+    const resultColor=kpi==='ind'?'var(--blue)':'var(--green)';
+    const rows=activeUnits.map(u=>{
+      const d=an[u];
+      const ind=d.ind??0, disp=d.disp??100;
+      const peso=(d.eTeo/f2.eteo*100).toFixed(2);
+      return `<tr>
+        <td>${u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[u]}</span></td>
+        <td>${f(d.eInd,0)}</td><td>${f(d.eTeo,0)}</td>
+        <td>${peso}%</td>
+        <td style="color:var(--blue)">${ind.toFixed(4)}%</td>
+        <td style="color:var(--green)">${disp.toFixed(4)}%</td>
+      </tr>`;}).join('');
+    return `<div class="kpi-detail">
+      <div class="kpi-detail-header">
+        ${BACK}
+        <div class="kpi-detail-title">${title}</div>
+        <div class="kpi-detail-result" style="color:${resultColor}">${result}</div>
+      </div>
+      <div class="kpi-detail-formula">
+        <b>IND_flota</b> = Σ E_ind / Σ E_teo × 100<br>
+        = ${f(f2.eind,0)} MWh / ${f(f2.eteo,0)} MWh × 100 = <b>${f2.ind.toFixed(4)}%</b><br>
+        <b>DISP_flota</b> = 100 − IND = 100 − ${f2.ind.toFixed(4)}% = <b>${f2.disp.toFixed(4)}%</b>
+      </div>
+      <table class="kpi-dtable"><thead><tr>
+        <th>Unidad</th><th>E. Ind. (MWh)</th><th>E. Teo. (MWh)</th><th>Peso</th><th>IND</th><th>DISP</th>
+      </tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td>TOTAL / PONDERADO</td>
+        <td>${f(f2.eind,0)}</td><td>${f(f2.eteo,0)}</td><td>100%</td>
+        <td style="color:var(--blue)">${f2.ind.toFixed(4)}%</td>
+        <td style="color:var(--green)">${f2.disp.toFixed(4)}%</td>
+      </tr></tfoot></table>
+    </div>`;
+  }
+
+  if(kpi==='eind'){
+    const rows=activeUnits.map(u=>{
+      const d=an[u];
+      const pct=(d.eInd/f2.eind*100).toFixed(1);
+      return `<tr>
+        <td>${u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[u]}</span></td>
+        <td>${d.pnet} MW</td>
+        <td>${f(d.hfo,2)} h</td><td>${f(d.hlf,2)} h</td><td>${f(d.hpm,2)} h</td>
+        <td style="color:var(--red)">${f(d.eInd,0)} MWh</td>
+        <td style="color:var(--blue)">${f(d.eTeo,0)} MWh</td>
+        <td>${pct}%</td>
+      </tr>`;}).join('');
+    return `<div class="kpi-detail">
+      <div class="kpi-detail-header">
+        ${BACK}
+        <div class="kpi-detail-title">Energía Indisponible</div>
+        <div class="kpi-detail-result" style="color:var(--red)">${(f2.eind/1000).toFixed(3)} GWh</div>
+      </div>
+      <div class="kpi-detail-formula">
+        <b>DF:</b> E_ind_u = P_neta × h_fo &nbsp;|&nbsp; <b>LF:</b> E_ind_u = (P_neta − Carga_Disp) × h_lf<br>
+        <b>Σ E_ind</b> = ${activeUnits.map(u=>`${f(an[u].eInd,0)}`).join(' + ')} = <b>${f(f2.eind,0)} MWh = ${(f2.eind/1000).toFixed(3)} GWh</b><br>
+        Energía teórica disponible: <b>${(f2.eteo/1000).toFixed(3)} GWh</b>
+      </div>
+      <table class="kpi-dtable"><thead><tr>
+        <th>Unidad</th><th>P. Neta</th><th>H. DF</th><th>H. LF</th><th>H. PM</th><th>E. Ind.</th><th>E. Teo.</th><th>% del total</th>
+      </tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr><td>TOTAL</td><td>—</td>
+        <td>${f(activeUnits.reduce((s,u)=>s+an[u].hfo,0),2)} h</td>
+        <td>${f(activeUnits.reduce((s,u)=>s+an[u].hlf,0),2)} h</td>
+        <td>${f(activeUnits.reduce((s,u)=>s+an[u].hpm,0),2)} h</td>
+        <td style="color:var(--red)">${f(f2.eind,0)} MWh</td>
+        <td style="color:var(--blue)">${f(f2.eteo,0)} MWh</td>
+        <td>100%</td>
+      </tr></tfoot></table>
+    </div>`;
+  }
+
+  if(kpi==='for'){
+    const rows=activeUnits.map(u=>{
+      const d=an[u];
+      const forU=d.hfo>0?d.hfo/(d.hfo+d.hs)*100:0;
+      return `<tr>
+        <td>${u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[u]}</span></td>
+        <td>${d.pnet} MW</td>
+        <td style="color:var(--red)">${f(d.hfo,2)} h</td>
+        <td>${f(d.hs,2)} h</td>
+        <td>${f(d.hlf,2)} h</td>
+        <td>${f(d.hpm,2)} h</td>
+        <td style="color:var(--accent)">${forU.toFixed(4)}%</td>
+      </tr>`;}).join('');
+    const tHFO=activeUnits.reduce((s,u)=>s+an[u].hfo,0);
+    const tHS=activeUnits.reduce((s,u)=>s+an[u].hs,0);
+    return `<div class="kpi-detail">
+      <div class="kpi-detail-header">
+        ${BACK}
+        <div class="kpi-detail-title">FOR — Forced Outage Rate</div>
+        <div class="kpi-detail-result" style="color:var(--accent)">${f2.for.toFixed(4)}%</div>
+      </div>
+      <div class="kpi-detail-formula">
+        <b>FOR_flota</b> = Σ(HFO × P_neta) / [Σ(HFO × P_neta) + Σ(HS × P_neta)] × 100<br>
+        = ${f(tHFO,2)} h / (${f(tHFO,2)} h + ${f(tHS,2)} h) × 100 = <b>${f2.for.toFixed(4)}%</b><br>
+        Excluye: Limitación (LF) y Mantenimiento Programado (PM)
+      </div>
+      <table class="kpi-dtable"><thead><tr>
+        <th>Unidad</th><th>P. Neta</th><th>H. DF (HFO)</th><th>H. Servicio (HS)</th><th>H. LF</th><th>H. PM</th><th>FOR</th>
+      </tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr><td>PONDERADO FLOTA</td><td>—</td>
+        <td style="color:var(--red)">${f(tHFO,2)} h</td>
+        <td>${f(tHS,2)} h</td>
+        <td>${f(activeUnits.reduce((s,u)=>s+an[u].hlf,0),2)} h</td>
+        <td>${f(activeUnits.reduce((s,u)=>s+an[u].hpm,0),2)} h</td>
+        <td style="color:var(--accent)">${f2.for.toFixed(4)}%</td>
+      </tr></tfoot></table>
+    </div>`;
+  }
+
+  if(kpi==='units'){
+    const allRows=units.map(u=>{
+      const d=an[u];
+      const activo=d.active;
+      return `<tr class="${activo?'':'inactive-row'}">
+        <td>${u}</td>
+        <td><span class="site-tag ts-${SITE_MAP[u].toLowerCase()}">${SITE_MAP[u]}</span></td>
+        <td>${d.pnet} MW</td>
+        <td>${activo?'✅ Activa':'—'}</td>
+        <td style="color:${activo?'var(--blue)':'var(--muted)'}">${activo&&d.ind!=null?d.ind.toFixed(2)+'%':'—'}</td>
+        <td style="color:${activo?'var(--green)':'var(--muted)'}">${activo&&d.disp!=null?d.disp.toFixed(2)+'%':'—'}</td>
+        <td style="color:var(--accent)">${activo?d.for.toFixed(2)+'%':'—'}</td>
+        <td style="color:var(--red)">${activo?f(d.eInd,0)+' MWh':'—'}</td>
+      </tr>`;}).join('');
+    return `<div class="kpi-detail">
+      <div class="kpi-detail-header">
+        ${BACK}
+        <div class="kpi-detail-title">Unidades — ${selYear}</div>
+        <div class="kpi-detail-result" style="color:var(--purple)">${n} <span style="font-size:40%;color:var(--muted)">/ ${units.length} totales</span></div>
+      </div>
+      <div class="kpi-detail-formula">
+        Unidades con vigencia activa en ${selYear}: <b>${activeUnits.map(u=>u).join(', ')}</b><br>
+        Total potencia neta activa: <b>${f(activeUnits.reduce((s,u)=>s+an[u].pnet,0),2)} MW</b>
+      </div>
+      <table class="kpi-dtable"><thead><tr>
+        <th>Unidad</th><th>Central</th><th>P. Neta</th><th>Estado</th><th>IND</th><th>DISP</th><th>FOR</th><th>E. Ind.</th>
+      </tr></thead><tbody>${allRows}</tbody></table>
+    </div>`;
+  }
+  return '';
+}
+
+function renderKPIs(units,year){
+  const an=DATA[year].annual;
+  const f2=fleetInd(units,year);
+  const n=units.filter(u=>an[u].active).length;
+
+  const detailWrap=document.getElementById('kpiDetailWrap');
+  const rowWrap=document.getElementById('kpiRowWrap');
+
+  // Si hay KPI seleccionado, mostrar detalle
+  if(selKPI){
+    detailWrap.style.display='block';
+    rowWrap.style.display='none';
+    detailWrap.innerHTML=renderKPIDetail(selKPI,units,year,f2,n);
+    return;
+  }
+  detailWrap.style.display='none';
+  rowWrap.style.display='block';
+
+  const row=document.getElementById('kpiRow');
+  row.className='kpi-row fade';
+  const tip='cursor:pointer;transition:transform .15s,border-color .15s;';
+  row.innerHTML=`
+  <div class="kpi k1" style="${tip}" onclick="selKPI='ind';renderKPIs(scopeUnits(),selYear)" title="Ver detalle del cálculo">
+    <div class="kpi-lbl">Indisponibilidad<br>Energética</div>
+    <div class="kpi-val k1">${f2.ind.toFixed(2)}%</div>
+    <div class="kpi-sub">Σ E_ind / Σ E_teo</div>
+  </div>
+  <div class="kpi k4" style="${tip}" onclick="selKPI='disp';renderKPIs(scopeUnits(),selYear)" title="Ver detalle del cálculo">
+    <div class="kpi-lbl">Disponibilidad<br>Energética</div>
+    <div class="kpi-val k4">${f2.disp.toFixed(2)}%</div>
+    <div class="kpi-sub">${n} unidades activas</div>
+  </div>
+  <div class="kpi k2" style="${tip}" onclick="selKPI='eind';renderKPIs(scopeUnits(),selYear)" title="Ver detalle del cálculo">
+    <div class="kpi-lbl">Energía<br>Indisponible</div>
+    <div class="kpi-val k2">${(f2.eind/1000).toFixed(1)} <span style="font-size:55%;opacity:.8">GWh</span></div>
+    <div class="kpi-sub">de ${(f2.eteo/1000).toFixed(1)} GWh teóricos</div>
+  </div>
+  <div class="kpi k3" style="${tip}" onclick="selKPI='for';renderKPIs(scopeUnits(),selYear)" title="FOR = Forced Outage Rate · HFO / (HFO + HS) × 100">
+    <div class="kpi-lbl">FOR Promedio<br>Ponderado</div>
+    <div class="kpi-val k3">${f2.for.toFixed(2)}%</div>
+    <div class="kpi-sub">HFO / (HFO + HS)</div>
+  </div>
+  <div class="kpi k5" style="${tip}" onclick="selKPI='units';renderKPIs(scopeUnits(),selYear)" title="Ver detalle de unidades">
+    <div class="kpi-lbl">Unidades<br>Activas</div>
+    <div class="kpi-val k5">${n}<span style="font-size:55%;color:var(--muted)"> / ${units.length}</span></div>
+    <div class="kpi-sub">en vigencia ${selYear}</div>
+  </div>`;
+
+  // ── Fila de hoy (solo año en curso) ──
+  const todayBar=document.getElementById('kpiTodayBar');
+  const todayRow=document.getElementById('kpiRowToday');
+  const todayLbl=document.getElementById('kpiTodayLbl');
+  const now=new Date();
+  const PS=new Date(parseInt(year),0,1).getTime();
+  const PE=new Date(parseInt(year)+1,0,1).getTime();
+  const isCurrentYear=now.getTime()>=PS&&now.getTime()<PE;
+
+  if(!isCurrentYear){
+    todayBar.style.display='none';
+    document.getElementById('kpiRowToday').style.display='none';
+    return;
+  }
+  todayBar.style.display='block';
+  const xNow=(now.getTime()-PS)/(PE-PS);
+  const dd=String(now.getDate()).padStart(2,'0');
+  const mm=String(now.getMonth()+1).padStart(2,'0');
+  const aaaa=now.getFullYear();
+  todayLbl.textContent=`· ${dd}/${mm}/${aaaa}`;
+
+  // Agregar E_ind y E_teo interpolados al día de hoy
+  let tEindHoy=0,tEteoHoy=0,tEfoHoy=0,tEhsHoy=0;
+  units.filter(u=>an[u].active&&an[u].cumPts).forEach(u=>{
+    const cp=an[u].cumPts;
+    const eInd=interpolateCum(cp,xNow,'eInd');
+    const eTeo=interpolateCum(cp,xNow,'eTeo');
+    tEindHoy+=eInd; tEteoHoy+=eTeo;
+    tEfoHoy+=an[u].hfo*an[u].pnet*(xNow);
+    tEhsHoy+=an[u].hs*an[u].pnet*(xNow);
+  });
+  const indHoy=tEteoHoy>0?Math.min(tEindHoy/tEteoHoy*100,100):0;
+  const dispHoy=100-indHoy;
+  const forHoy=tEfoHoy>0?tEfoHoy/(tEfoHoy+tEhsHoy)*100:0;
+  const diasTransc=Math.round(xNow*(parseInt(year)%4===0?366:365));
+  const diasTotal=parseInt(year)%4===0?366:365;
+
+  const todayRowEl=document.getElementById('kpiRowToday');
+  const todayDetailWrap=document.getElementById('kpiTodayDetailWrap');
+
+  // Si hay KPI Today seleccionado, mostrar detalle
+  if(selKPIToday){
+    todayDetailWrap.style.display='block';
+    todayRowEl.style.display='none';
+    const BACK_T=`<button class="kpi-detail-back" onclick="selKPIToday=null;renderKPIs(scopeUnits(),selYear)">← Volver</button>`;
+    const activeUnits=units.filter(u=>an[u].active&&an[u].eTeo>0);
+    const fechaHoy=`${dd}/${mm}/${aaaa}`;
+
+    // Calcular datos por unidad al día de hoy
+    const todayUnits=activeUnits.map(u=>{
+      const cp=an[u].cumPts;
+      const eIndU=interpolateCum(cp,xNow,'eInd');
+      const eTeoU=interpolateCum(cp,xNow,'eTeo');
+      const indU=eTeoU>0?Math.min(eIndU/eTeoU*100,100):0;
+      const hfoU=an[u].hfo*xNow;
+      const hsU=an[u].hs*xNow;
+      const forU=hfoU>0?hfoU/(hfoU+hsU)*100:0;
+      return {u,eInd:eIndU,eTeo:eTeoU,ind:indU,disp:100-indU,for:forU,pnet:an[u].pnet,hfo:hfoU,hs:hsU,hlf:an[u].hlf*xNow,hpm:an[u].hpm*xNow};
+    });
+
+    if(selKPIToday==='ind'||selKPIToday==='disp'){
+      const title=selKPIToday==='ind'?'Indisponibilidad Energética (al día de hoy)':'Disponibilidad Energética (al día de hoy)';
+      const result=selKPIToday==='ind'?indHoy.toFixed(4)+'%':dispHoy.toFixed(4)+'%';
+      const resultColor=selKPIToday==='ind'?'var(--blue)':'var(--green)';
+      const rows=todayUnits.map(tu=>{
+        const peso=(tu.eTeo/tEteoHoy*100).toFixed(2);
+        return `<tr><td>${tu.u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[tu.u]}</span></td>
+          <td>${f(tu.eInd,0)}</td><td>${f(tu.eTeo,0)}</td><td>${peso}%</td>
+          <td style="color:var(--blue)">${tu.ind.toFixed(4)}%</td>
+          <td style="color:var(--green)">${tu.disp.toFixed(4)}%</td></tr>`;
+      }).join('');
+      todayDetailWrap.innerHTML=`<div class="kpi-detail">
+        <div class="kpi-detail-header">${BACK_T}
+          <div class="kpi-detail-title">${title}</div>
+          <div class="kpi-detail-result" style="color:${resultColor}">${result}</div>
+        </div>
+        <div class="kpi-detail-formula">
+          <b>Período:</b> 01/01/${year} → ${fechaHoy} (${diasTransc} días transcurridos)<br>
+          <b>IND_flota</b> = Σ E_ind / Σ E_teo × 100 = ${f(tEindHoy,0)} / ${f(tEteoHoy,0)} × 100 = <b>${indHoy.toFixed(4)}%</b><br>
+          <b>DISP_flota</b> = 100 − IND = <b>${dispHoy.toFixed(4)}%</b>
+        </div>
+        <table class="kpi-dtable"><thead><tr>
+          <th>Unidad</th><th>E. Ind. (MWh)</th><th>E. Teo. (MWh)</th><th>Peso</th><th>IND</th><th>DISP</th>
+        </tr></thead><tbody>${rows}</tbody>
+        <tfoot><tr><td>TOTAL / PONDERADO</td><td>${f(tEindHoy,0)}</td><td>${f(tEteoHoy,0)}</td><td>100%</td>
+          <td style="color:var(--blue)">${indHoy.toFixed(4)}%</td>
+          <td style="color:var(--green)">${dispHoy.toFixed(4)}%</td></tr></tfoot></table>
+      </div>`;
+    } else if(selKPIToday==='eind'){
+      const rows=todayUnits.map(tu=>{
+        const pct=(tu.eInd/tEindHoy*100).toFixed(1);
+        return `<tr><td>${tu.u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[tu.u]}</span></td>
+          <td>${tu.pnet} MW</td><td>${f(tu.hfo,2)} h</td><td>${f(tu.hlf,2)} h</td><td>${f(tu.hpm,2)} h</td>
+          <td style="color:var(--red)">${f(tu.eInd,0)} MWh</td>
+          <td style="color:var(--blue)">${f(tu.eTeo,0)} MWh</td><td>${pct}%</td></tr>`;
+      }).join('');
+      todayDetailWrap.innerHTML=`<div class="kpi-detail">
+        <div class="kpi-detail-header">${BACK_T}
+          <div class="kpi-detail-title">Energía Indisponible (al día de hoy)</div>
+          <div class="kpi-detail-result" style="color:var(--red)">${(tEindHoy/1000).toFixed(3)} GWh</div>
+        </div>
+        <div class="kpi-detail-formula">
+          <b>Período:</b> 01/01/${year} → ${fechaHoy} (${diasTransc} días)<br>
+          <b>DF:</b> E_ind = P_neta × h_fo &nbsp;|&nbsp; <b>LF:</b> E_ind = (P_neta − Carga_Disp) × h_lf<br>
+          <b>Σ E_ind</b> = <b>${f(tEindHoy,0)} MWh = ${(tEindHoy/1000).toFixed(3)} GWh</b> de ${(tEteoHoy/1000).toFixed(3)} GWh teóricos
+        </div>
+        <table class="kpi-dtable"><thead><tr>
+          <th>Unidad</th><th>P. Neta</th><th>H. DF</th><th>H. LF</th><th>H. PM</th><th>E. Ind.</th><th>E. Teo.</th><th>% del total</th>
+        </tr></thead><tbody>${rows}</tbody>
+        <tfoot><tr><td>TOTAL</td><td>—</td>
+          <td>${f(todayUnits.reduce((s,t)=>s+t.hfo,0),2)} h</td>
+          <td>${f(todayUnits.reduce((s,t)=>s+t.hlf,0),2)} h</td>
+          <td>${f(todayUnits.reduce((s,t)=>s+t.hpm,0),2)} h</td>
+          <td style="color:var(--red)">${f(tEindHoy,0)} MWh</td>
+          <td style="color:var(--blue)">${f(tEteoHoy,0)} MWh</td>
+          <td>100%</td></tr></tfoot></table>
+      </div>`;
+    } else if(selKPIToday==='for'){
+      const rows=todayUnits.map(tu=>{
+        return `<tr><td>${tu.u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[tu.u]}</span></td>
+          <td>${tu.pnet} MW</td>
+          <td style="color:var(--red)">${f(tu.hfo,2)} h</td><td>${f(tu.hs,2)} h</td>
+          <td>${f(tu.hlf,2)} h</td><td>${f(tu.hpm,2)} h</td>
+          <td style="color:var(--accent)">${tu.for.toFixed(4)}%</td></tr>`;
+      }).join('');
+      todayDetailWrap.innerHTML=`<div class="kpi-detail">
+        <div class="kpi-detail-header">${BACK_T}
+          <div class="kpi-detail-title">FOR — Forced Outage Rate (al día de hoy)</div>
+          <div class="kpi-detail-result" style="color:var(--accent)">${forHoy.toFixed(4)}%</div>
+        </div>
+        <div class="kpi-detail-formula">
+          <b>Período:</b> 01/01/${year} → ${fechaHoy} (${diasTransc} días)<br>
+          <b>FOR_flota</b> = Σ(HFO × P_neta) / [Σ(HFO × P_neta) + Σ(HS × P_neta)] × 100 = <b>${forHoy.toFixed(4)}%</b><br>
+          Excluye: Limitación (LF) y Mantenimiento Programado (PM)
+        </div>
+        <table class="kpi-dtable"><thead><tr>
+          <th>Unidad</th><th>P. Neta</th><th>H. DF (HFO)</th><th>H. Servicio (HS)</th><th>H. LF</th><th>H. PM</th><th>FOR</th>
+        </tr></thead><tbody>${rows}</tbody>
+        <tfoot><tr><td>PONDERADO FLOTA</td><td>—</td>
+          <td style="color:var(--red)">${f(todayUnits.reduce((s,t)=>s+t.hfo,0),2)} h</td>
+          <td>${f(todayUnits.reduce((s,t)=>s+t.hs,0),2)} h</td>
+          <td>${f(todayUnits.reduce((s,t)=>s+t.hlf,0),2)} h</td>
+          <td>${f(todayUnits.reduce((s,t)=>s+t.hpm,0),2)} h</td>
+          <td style="color:var(--accent)">${forHoy.toFixed(4)}%</td></tr></tfoot></table>
+      </div>`;
+    }
+    return;
+  }
+
+  todayDetailWrap.style.display='none';
+  todayRowEl.style.display='grid';
+  todayRowEl.className='kpi-row kpi-row-today fade';
+  const tipT='cursor:pointer;transition:transform .15s,border-color .15s;';
+  todayRowEl.innerHTML=`
+  <div class="kpi k1" style="${tipT}" onclick="selKPIToday='ind';renderKPIs(scopeUnits(),selYear)" title="Ver detalle del cálculo">
+    <div class="kpi-lbl">Indisponibilidad<br>Energética</div>
+    <div class="kpi-val k1">${indHoy.toFixed(2)}%</div>
+    <div class="kpi-sub">Σ E_ind / Σ E_teo</div>
+  </div>
+  <div class="kpi k4" style="${tipT}" onclick="selKPIToday='disp';renderKPIs(scopeUnits(),selYear)" title="Ver detalle del cálculo">
+    <div class="kpi-lbl">Disponibilidad<br>Energética</div>
+    <div class="kpi-val k4">${dispHoy.toFixed(2)}%</div>
+    <div class="kpi-sub">${n} unidades activas</div>
+  </div>
+  <div class="kpi k2" style="${tipT}" onclick="selKPIToday='eind';renderKPIs(scopeUnits(),selYear)" title="Ver detalle del cálculo">
+    <div class="kpi-lbl">Energía<br>Indisponible</div>
+    <div class="kpi-val k2">${(tEindHoy/1000).toFixed(1)} <span style="font-size:55%;opacity:.8">GWh</span></div>
+    <div class="kpi-sub">de ${(tEteoHoy/1000).toFixed(1)} GWh teóricos</div>
+  </div>
+  <div class="kpi k3" style="${tipT}" onclick="selKPIToday='for';renderKPIs(scopeUnits(),selYear)" title="FOR al día de hoy">
+    <div class="kpi-lbl">FOR Promedio<br>Ponderado</div>
+    <div class="kpi-val k3">${forHoy.toFixed(2)}%</div>
+    <div class="kpi-sub">HFO / (HFO + HS)</div>
+  </div>
+  <div class="kpi k5">
+    <div class="kpi-lbl">Período<br>Transcurrido</div>
+    <div class="kpi-val k5" style="font-size:clamp(22px,2.5vw,34px)">${Math.round(xNow*100)}<span style="font-size:55%;color:var(--muted)">%</span></div>
+    <div class="kpi-sub">${diasTransc} de ${diasTotal} días</div>
+  </div>`;
+}
+
+function renderKPIMonth(units,year){
+  const an=DATA[year].annual;
+  const monthly=DATA[year].monthly;
+  const now=new Date();
+  const PS=new Date(parseInt(year),0,1).getTime();
+  const PE=new Date(parseInt(year)+1,0,1).getTime();
+  const section=document.getElementById('monthSection');
+  const tabs=document.getElementById('monthTabs');
+  const content=document.getElementById('monthContent');
+  const detailWrap=document.getElementById('kpiMonthDetailWrap');
+  const todayDetailWrap=document.getElementById('kpiMonthTodayDetailWrap');
+
+  section.style.display='block';
+
+  const curMonth=now.getTime()>=PS&&now.getTime()<PE?now.getMonth():11;
+  if(selMonthKPI===null) selMonthKPI=curMonth;
+  const m=selMonthKPI;
+  const mName=MONTHS[m];
+
+  // Tabs
+  tabs.innerHTML='';
+  MONTHS.forEach((mn,i)=>{
+    const t=document.createElement('button');
+    t.className='month-tab'+(i===m?' active':'');
+    t.textContent=mn;
+    t.onclick=()=>{selMonthKPI=i;selMonth=i;selKPIMonth=null;selKPIMonthToday=null;renderKPIMonth(scopeUnits(),selYear);renderChartSection(scopeUnits(),selYear);};
+    tabs.appendChild(t);
+  });
+
+  // Calcular indicadores del mes completo
+  const activeUnits=units.filter(u=>an[u].active);
+  let tEindM=0,tEteoM=0,tHfoM=0,tHsM=0,tHlfM=0,tHpmM=0;
+  const unitData=[];
+  activeUnits.forEach(u=>{
+    const mo=monthly[u][m];
+    if(!mo||mo.ind==='PM') return;
+    const eIndU=mo.eTeo>0?mo.eTeo*(mo.ind/100):0;
+    tEindM+=eIndU; tEteoM+=mo.eTeo||0;
+    tHfoM+=mo.hfo||0; tHlfM+=mo.hlf||0; tHpmM+=mo.hpm||0;
+    const hsU=Math.max((mo.ht||0)-(mo.hpm||0)-(mo.hfo||0)-(mo.hlf||0),0);
+    tHsM+=hsU;
+    unitData.push({u,eInd:eIndU,eTeo:mo.eTeo||0,ind:mo.ind||0,disp:100-(mo.ind||0),
+      hfo:mo.hfo||0,hlf:mo.hlf||0,hpm:mo.hpm||0,hs:hsU,pnet:an[u].pnet,
+      for:mo.hfo>0?mo.hfo/(mo.hfo+hsU)*100:0});
+  });
+  const indM=tEteoM>0?Math.min(tEindM/tEteoM*100,100):0;
+  const dispM=100-indM;
+  const forM=tHfoM>0?tHfoM/(tHfoM+tHsM)*100:0;
+
+  // Detalle KPI mensual
+  if(selKPIMonth){
+    detailWrap.style.display='block';content.style.display='none';
+    const BK=`<button class="kpi-detail-back" onclick="selKPIMonth=null;renderKPIMonth(scopeUnits(),selYear)">← Volver</button>`;
+    if(selKPIMonth==='ind'||selKPIMonth==='disp'){
+      const tl=selKPIMonth==='ind'?'Indisponibilidad':'Disponibilidad';
+      const rs=selKPIMonth==='ind'?indM.toFixed(4)+'%':dispM.toFixed(4)+'%';
+      const cl=selKPIMonth==='ind'?'var(--blue)':'var(--green)';
+      const rw=unitData.map(tu=>`<tr><td>${tu.u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[tu.u]}</span></td><td>${f(tu.eInd,0)}</td><td>${f(tu.eTeo,0)}</td><td>${tEteoM>0?(tu.eTeo/tEteoM*100).toFixed(2):'0'}%</td><td style="color:var(--blue)">${tu.ind.toFixed(4)}%</td><td style="color:var(--green)">${tu.disp.toFixed(4)}%</td></tr>`).join('');
+      detailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BK}<div class="kpi-detail-title">${tl} · ${mName} ${year}</div><div class="kpi-detail-result" style="color:${cl}">${rs}</div></div><div class="kpi-detail-formula"><b>IND</b> = ${f(tEindM,0)} / ${f(tEteoM,0)} × 100 = <b>${indM.toFixed(4)}%</b></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th><th>Peso</th><th>IND</th><th>DISP</th></tr></thead><tbody>${rw}</tbody><tfoot><tr><td>TOTAL</td><td>${f(tEindM,0)}</td><td>${f(tEteoM,0)}</td><td>100%</td><td style="color:var(--blue)">${indM.toFixed(4)}%</td><td style="color:var(--green)">${dispM.toFixed(4)}%</td></tr></tfoot></table></div>`;
+    } else if(selKPIMonth==='eind'){
+      const rw=unitData.map(tu=>`<tr><td>${tu.u}</td><td>${tu.pnet}MW</td><td>${f(tu.hfo,2)}h</td><td>${f(tu.hlf,2)}h</td><td style="color:var(--red)">${f(tu.eInd,0)}</td><td>${tEindM>0?(tu.eInd/tEindM*100).toFixed(1):'0'}%</td></tr>`).join('');
+      detailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BK}<div class="kpi-detail-title">E.Indisponible · ${mName} ${year}</div><div class="kpi-detail-result" style="color:var(--red)">${(tEindM/1000).toFixed(3)} GWh</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>P.Neta</th><th>H.DF</th><th>H.LF</th><th>E.Ind.</th><th>%</th></tr></thead><tbody>${rw}</tbody></table></div>`;
+    } else if(selKPIMonth==='for'){
+      const rw=unitData.map(tu=>`<tr><td>${tu.u}</td><td>${tu.pnet}MW</td><td style="color:var(--red)">${f(tu.hfo,2)}h</td><td>${f(tu.hs,2)}h</td><td style="color:var(--accent)">${tu.for.toFixed(4)}%</td></tr>`).join('');
+      detailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BK}<div class="kpi-detail-title">FOR · ${mName} ${year}</div><div class="kpi-detail-result" style="color:var(--accent)">${forM.toFixed(4)}%</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>P.Neta</th><th>H.DF</th><th>H.Serv.</th><th>FOR</th></tr></thead><tbody>${rw}</tbody></table></div>`;
+    }
+    return;
+  }
+  // Detalle "al día de hoy" del mes
+  if(selKPIMonthToday){
+    const mStart2=new Date(parseInt(year),m,1).getTime(),mEnd2=new Date(parseInt(year),m+1,1).getTime(),nowMs2=now.getTime();
+    let mt2E=0,mt2T=0,mt2F=0,mt2S=0;const mt2U=[];
+    activeUnits.forEach(u=>{const Pn=PNET[u]||0;const v=RAW.vigency[u];let uS=mStart2,uE=Math.min(mEnd2,nowMs2);if(v){uS=Math.max(mStart2,v.start||mStart2);uE=Math.min(uE,v.end||uE);}if(uS>=uE)return;const uEvs=RAW.allEvents.filter(e=>e.unidad===u);const pmU=RAW.allPM.filter(pm=>pm.unidad===u);const hpmU=unionHoursMs(pmU,uS,uE);const htU=(uE-uS)/3600000;const denomU=Pn*Math.max(htU-hpmU,0);const sw=sweepEnergy(uEvs,uS,uE,Pn);const hsU=Math.max(htU-hpmU-sw.hFO-sw.hLF,0);mt2E+=sw.eInd;mt2T+=denomU;mt2F+=sw.hFO;mt2S+=hsU;mt2U.push({u,eInd:sw.eInd,eTeo:denomU,ind:denomU>0?Math.min(sw.eInd/denomU*100,100):0,hfo:sw.hFO,hs:hsU,pnet:Pn,for:sw.hFO>0?sw.hFO/(sw.hFO+hsU)*100:0});});
+    const mt2I=mt2T>0?Math.min(mt2E/mt2T*100,100):0;const mt2For=mt2F>0?mt2F/(mt2F+mt2S)*100:0;
+    todayDetailWrap.style.display='block';content.style.display='none';
+    const BKT=`<button class="kpi-detail-back" onclick="selKPIMonthToday=null;renderKPIMonth(scopeUnits(),selYear)">← Volver</button>`;
+    const ddM2=String(now.getDate()).padStart(2,'0'),mmM2=String(now.getMonth()+1).padStart(2,'0');
+    if(selKPIMonthToday==='ind'||selKPIMonthToday==='disp'){
+      const tl2=selKPIMonthToday==='ind'?'IND':'DISP';const rs2=selKPIMonthToday==='ind'?mt2I.toFixed(4)+'%':(100-mt2I).toFixed(4)+'%';const cl2=selKPIMonthToday==='ind'?'var(--blue)':'var(--green)';
+      const rw2=mt2U.map(tu=>`<tr><td>${tu.u}</td><td>${f(tu.eInd,0)}</td><td>${f(tu.eTeo,0)}</td><td style="color:var(--blue)">${tu.ind.toFixed(4)}%</td></tr>`).join('');
+      todayDetailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BKT}<div class="kpi-detail-title">${tl2} al día de hoy · ${mName}</div><div class="kpi-detail-result" style="color:${cl2}">${rs2}</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th><th>IND</th></tr></thead><tbody>${rw2}</tbody></table></div>`;
+    } else if(selKPIMonthToday==='eind'){
+      todayDetailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BKT}<div class="kpi-detail-title">E.Ind. al día · ${mName}</div><div class="kpi-detail-result" style="color:var(--red)">${(mt2E/1000).toFixed(3)} GWh</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th></tr></thead><tbody>${mt2U.map(tu=>`<tr><td>${tu.u}</td><td style="color:var(--red)">${f(tu.eInd,0)}</td><td>${f(tu.eTeo,0)}</td></tr>`).join('')}</tbody></table></div>`;
+    } else if(selKPIMonthToday==='for'){
+      todayDetailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BKT}<div class="kpi-detail-title">FOR al día · ${mName}</div><div class="kpi-detail-result" style="color:var(--accent)">${mt2For.toFixed(4)}%</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>H.DF</th><th>H.Serv.</th><th>FOR</th></tr></thead><tbody>${mt2U.map(tu=>`<tr><td>${tu.u}</td><td style="color:var(--red)">${f(tu.hfo,2)}h</td><td>${f(tu.hs,2)}h</td><td style="color:var(--accent)">${tu.for.toFixed(4)}%</td></tr>`).join('')}</tbody></table></div>`;
+    }
+    return;
+  }
+
+  detailWrap.style.display='none';todayDetailWrap.style.display='none';content.style.display='block';
+
+  // Header mes
+  let html=`<div class="month-header"><div><span class="month-title">${mName} ${year}</span><span class="month-period"> · Mes completo</span></div></div>`;
+  // KPIs compactos
+  html+=`<div class="month-kpis">
+    <div class="mk-item" onclick="selKPIMonth='ind';renderKPIMonth(scopeUnits(),selYear)"><div class="mk-label">IND. Energética</div><div class="mk-value v-blue">${indM.toFixed(2)}%</div><div class="mk-sub">Σ E_ind / Σ E_teo</div></div>
+    <div class="mk-item" onclick="selKPIMonth='disp';renderKPIMonth(scopeUnits(),selYear)"><div class="mk-label">Disponibilidad</div><div class="mk-value v-green">${dispM.toFixed(2)}%</div><div class="mk-sub">${unitData.length} unidades</div></div>
+    <div class="mk-item" onclick="selKPIMonth='eind';renderKPIMonth(scopeUnits(),selYear)"><div class="mk-label">E. Indisponible</div><div class="mk-value v-red">${(tEindM/1000).toFixed(1)} <span style="font-size:55%;opacity:.7">GWh</span></div><div class="mk-sub">de ${(tEteoM/1000).toFixed(1)} GWh</div></div>
+    <div class="mk-item" onclick="selKPIMonth='for';renderKPIMonth(scopeUnits(),selYear)"><div class="mk-label">FOR</div><div class="mk-value v-accent">${forM.toFixed(2)}%</div><div class="mk-sub">HFO / (HFO + HS)</div></div>
+  </div>`;
+
+  // "Al día de hoy" del mes
+  const mStart=new Date(parseInt(year),m,1).getTime();
+  const mEnd=new Date(parseInt(year),m+1,1).getTime();
+  const isCurrentMonth=now.getTime()>=mStart&&now.getTime()<mEnd;
+  if(isCurrentMonth){
+    const xMonth=(now.getTime()-mStart)/(mEnd-mStart);
+    const diasTranscM=Math.round(xMonth*new Date(parseInt(year),m+1,0).getDate());
+    const diasTotalM=new Date(parseInt(year),m+1,0).getDate();
+    const nowMs=now.getTime();const ddM=String(now.getDate()).padStart(2,'0'),mmM=String(now.getMonth()+1).padStart(2,'0');
+    let mtE=0,mtT=0,mtF=0,mtS=0;
+    activeUnits.forEach(u=>{const Pn=PNET[u]||0;const v=RAW.vigency[u];let uS=mStart,uE=Math.min(mEnd,nowMs);if(v){uS=Math.max(mStart,v.start||mStart);uE=Math.min(uE,v.end||uE);}if(uS>=uE)return;const uEvs=RAW.allEvents.filter(e=>e.unidad===u);const pmU=RAW.allPM.filter(pm=>pm.unidad===u);const hpmU=unionHoursMs(pmU,uS,uE);const htU=(uE-uS)/3600000;const denomU=Pn*Math.max(htU-hpmU,0);const sw=sweepEnergy(uEvs,uS,uE,Pn);const hsU=Math.max(htU-hpmU-sw.hFO-sw.hLF,0);mtE+=sw.eInd;mtT+=denomU;mtF+=sw.hFO;mtS+=hsU;});
+    const mtI=mtT>0?Math.min(mtE/mtT*100,100):0;const mtD=100-mtI;const mtFr=mtF>0?mtF/(mtF+mtS)*100:0;
+    html+=`<div class="month-today-sep">Al día de hoy · ${ddM}/${mmM}/${year}</div>`;
+    html+=`<div class="month-kpis today-kpis">
+      <div class="mk-item" onclick="selKPIMonthToday='ind';renderKPIMonth(scopeUnits(),selYear)"><div class="mk-label">IND. Energética</div><div class="mk-value v-blue">${mtI.toFixed(2)}%</div><div class="mk-sub">acumulado ${mName}</div></div>
+      <div class="mk-item" onclick="selKPIMonthToday='disp';renderKPIMonth(scopeUnits(),selYear)"><div class="mk-label">Disponibilidad</div><div class="mk-value v-green">${mtD.toFixed(2)}%</div><div class="mk-sub">acumulado ${mName}</div></div>
+      <div class="mk-item" onclick="selKPIMonthToday='eind';renderKPIMonth(scopeUnits(),selYear)"><div class="mk-label">E. Indisponible</div><div class="mk-value v-red">${(mtE/1000).toFixed(1)} <span style="font-size:55%;opacity:.7">GWh</span></div><div class="mk-sub">de ${(mtT/1000).toFixed(1)} GWh</div></div>
+      <div class="mk-item"><div class="mk-label">Período</div><div class="mk-value v-accent">${Math.round(xMonth*100)}%</div><div class="mk-sub">${diasTranscM} de ${diasTotalM} días</div><div class="month-progress" style="justify-content:center;margin-top:4px;"><div class="month-prog-bar"><div class="month-prog-fill" style="width:${Math.round(xMonth*100)}%"></div></div></div></div>
+    </div>`;
+  }
+  content.innerHTML=html;
+}
+
+function renderCards(units,year){
+  const an=DATA[year].annual;
+  const wrap=document.getElementById('cardsWrap');
+  wrap.className='cards-wrap fade'; wrap.innerHTML='';
+
+  if(selScope==='unit'){
+    const u=selUnit,d=an[u];
+    const site=SITE_MAP[u];
+    const siteColor=site==='CEM'?'var(--blue)':'var(--purple)';
+    wrap.innerHTML=`<div style="width:100%">
+      <button class="kpi-detail-back" onclick="selScope=prevScope||'flota';selKPIToday=null;render()" style="margin-bottom:10px">← Volver</button>
+      <div class="card ${cls(d.ind)}" style="width:100%;padding:24px;">
+      <div class="c-head" style="margin-bottom:16px;">
+        <span class="c-name" style="font-size:36px">${u}
+          <span style="font-family:var(--mono);font-size:14px;color:${siteColor};margin-left:10px;vertical-align:middle">${site}</span>
+        </span>
+        <span class="c-badge ${bc(d.ind)}" style="font-size:13px;padding:4px 12px">${lbl(d.ind)}</span>
+      </div>
+      ${d.active?`
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+        <div class="c-metric">
+          <div class="c-mlbl">IND. Energética</div>
+          <div class="c-mval ${mc(d.ind||0)}" style="font-size:28px">${d.ind!=null?d.ind.toFixed(2)+'%':'—'}</div>
+        </div>
+        <div class="c-metric">
+          <div class="c-mlbl">Disponibilidad</div>
+          <div class="c-mval grn" style="font-size:28px">${d.disp!=null?d.disp.toFixed(2)+'%':'—'}</div>
+        </div>
+        <div class="c-metric">
+          <div class="c-mlbl">FOR</div>
+          <div class="c-mval ${mc(d.for)}" style="font-size:28px">${d.for.toFixed(2)}%</div>
+        </div>
+        <div class="c-metric">
+          <div class="c-mlbl">P. Neta</div>
+          <div class="c-mval" style="font-size:28px">${d.pnet} <span style="font-size:16px;opacity:.7">MW</span></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:16px;">
+        <div class="c-metric">
+          <div class="c-mlbl">E. Indisponible</div>
+          <div class="c-mval red" style="font-size:22px">${f(d.eInd,0)} <span style="font-size:13px;opacity:.7">MWh</span></div>
+        </div>
+        <div class="c-metric">
+          <div class="c-mlbl">E. Teórica</div>
+          <div class="c-mval blu" style="font-size:22px">${f(d.eTeo,0)} <span style="font-size:13px;opacity:.7">MWh</span></div>
+        </div>
+        <div class="c-metric">
+          <div class="c-mlbl">H. Sal. Forzada</div>
+          <div class="c-mval" style="font-size:22px">${f(d.hfo,1)} <span style="font-size:13px;opacity:.7">h</span></div>
+        </div>
+        <div class="c-metric">
+          <div class="c-mlbl">H. Limitación</div>
+          <div class="c-mval" style="font-size:22px">${f(d.hlf,1)} <span style="font-size:13px;opacity:.7">h</span></div>
+        </div>
+        ${d.hpm>0?`<div class="c-metric">
+          <div class="c-mlbl">H. Mant. Prog.</div>
+          <div class="c-mval blu" style="font-size:22px">${f(d.hpm,1)} <span style="font-size:13px;opacity:.7">h</span></div>
+        </div>`:`<div class="c-metric">
+          <div class="c-mlbl">N° DF / LF / PM</div>
+          <div class="c-mval" style="font-size:22px">${d.n_fo} <span style="opacity:.4">/</span> ${d.n_lf} <span style="opacity:.4">/</span> ${d.n_pm}</div>
+        </div>`}
+      </div>
+      <div class="c-bar"><div class="c-bar-fill" style="width:${Math.min(d.ind||0,100)}%;background:${barC(d.ind||0)}"></div></div>`
+      :'<div class="c-pwr" style="padding:8px 0;font-size:18px">Sin vigencia en '+year+'</div>'}
+    </div></div>`;
+    return;
+  }
+
+  const sections=selScope==='flota'
+    ?[{label:'CEM',cls:'sh-cem',units:CEM},{label:'CET',cls:'sh-cet',units:CET}]
+    :[{label:selScope.toUpperCase(),cls:'sh-'+selScope,units}];
+
+  sections.forEach(sec=>{
+    // Solo unidades activas en el período
+    const activeUnits=sec.units.filter(u=>an[u].active);
+    if(!activeUnits.length) return;
+    const n=activeUnits.length;
+    const gridCls=n>=6?'n6':n>=4?'n4':n>=2?'n2':'n1';
+    let html=`<div class="cards-section"><div class="site-header ${sec.cls}">${sec.label} — ${n} UNIDADES</div><div class="cards ${gridCls}">`;
+    activeUnits.forEach(u=>{
+      const d=an[u];
+      html+=`<div class="card ${cls(d.ind)}" onclick="prevScope=selScope;selScope='unit';selUnit='${u}';selChartUnit='${u}';render();">
+        <div class="c-head"><span class="c-name">${u}</span><span class="c-badge ${bc(d.ind)}">${lbl(d.ind)}</span></div>
+        <div class="c-metric"><div class="c-mlbl">IND. Energética</div><div class="c-mval ${mc(d.ind||0)}">${d.ind!=null?d.ind.toFixed(2)+'%':'—'}</div></div>
+        <div class="c-metrics-grid">
+          <div class="c-metric"><div class="c-mlbl">E. Indisponible</div><div class="c-mval red">${f(d.eInd,0)} <span style="font-size:12px;opacity:.7">MWh</span></div></div>
+          <div class="c-metric"><div class="c-mlbl">E. Teórica</div><div class="c-mval blu">${f(d.eTeo,0)} <span style="font-size:12px;opacity:.7">MWh</span></div></div>
+          <div class="c-metric"><div class="c-mlbl">FOR</div><div class="c-mval ${mc(d.for)}">${d.for.toFixed(2)}%</div></div>
+          <div class="c-metric"><div class="c-mlbl">P. Neta</div><div class="c-mval">${d.pnet} <span style="font-size:12px;opacity:.7">MW</span></div></div>
+        </div>
+        <div class="c-bar"><div class="c-bar-fill" style="width:${Math.min(d.ind||0,100)}%;background:${barC(d.ind||0)}"></div></div>
+      </div>`;
+    });
+    html+='</div></div>';
+    wrap.innerHTML+=html;
+  });
+}
+
+function renderTimeline(units,year){
+  const an=DATA[year].annual,HT=DATA[year].ht;
+  const tl=document.getElementById('tlWrap');
+  tl.className='tl-wrap fade'; tl.innerHTML='';
+  const activeUnits=units.filter(u=>an[u].active);
+  activeUnits.forEach(u=>{
+    const d=an[u],site=SITE_MAP[u];
+    // Calcular horas reales de disponibilidad (sin PM, DF ni LF)
+    const hsDisp=Math.max(d.ht-d.hpm-d.hfo-d.hlf,0);
+    const pHS =(hsDisp/HT*100);
+    const pLF =(d.hlf/HT*100);
+    const pPM =(d.hpm/HT*100);
+    const pFO =Math.min(d.hfo/HT*100,100);
+    // Solo renderizar segmentos con ancho real > 0.05%
+    const segHS  = pHS >0.05?`<div class="tl-seg seg-hs"  style="width:${pHS.toFixed(2)}%">${pHS>12?`<span class="tl-slbl">DISP. ${f(hsDisp,0)}h</span>`:''}</div>`:'' ;
+    const segLF  = pLF >0.05?`<div class="tl-seg seg-lf"  style="width:${pLF.toFixed(2)}%">${pLF>5 ?`<span class="tl-slbl">LF ${f(d.hlf,0)}h</span>`:''}</div>`:'' ;
+    const segPM  = pPM >0.05?`<div class="tl-seg seg-pm"  style="width:${pPM.toFixed(2)}%">${pPM>5 ?`<span class="tl-slbl">PM ${f(d.hpm,0)}h</span>`:''}</div>`:'' ;
+    const segFO  = pFO >0.05?`<div class="tl-seg seg-fo"  style="width:${pFO.toFixed(2)}%">${pFO>4 ?`<span class="tl-slbl">DF ${f(d.hfo,0)}h</span>`:''}</div>`:'' ;
+    tl.innerHTML+=`<div class="tl-unit">
+      <div class="tl-hdr">
+        <span class="tl-name">${u}<span class="tl-site ts-${site.toLowerCase()}">${site}</span></span>
+        <span class="tl-pct"><span style="color:${d.ind>=5?'#f5a623':'#5dade2'}">IND.E: ${d.ind!=null?d.ind.toFixed(2):'—'}%</span> · <span style="color:#ff8a80">T.DF: ${pFO.toFixed(2)}%</span> · <span style="color:#ffd54f">T.LF: ${pLF.toFixed(2)}%</span> · <span style="color:#81d4fa">T.MP: ${pPM.toFixed(2)}%</span></span>
+      </div>
+      <div class="tl-bar">${segHS}${segLF}${segPM}${segFO}</div>
+    </div>`;
+  });
+  tl.innerHTML+=`<div class="tl-leg">
+    <div class="leg-i"><div class="leg-d" style="background:rgba(46,204,113,.5);border:1px solid rgba(46,204,113,.6)"></div>Disponible (DISP)</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(245,166,35,.6);border:1px solid rgba(245,166,35,.7)"></div>Limitación (LF)</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(52,152,219,.55);border:1px solid rgba(52,152,219,.65)"></div>Mant. Prog. (PM)</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(231,76,60,.75);border:1px solid rgba(231,76,60,.85)"></div>Sal. Forzada (DF)</div>
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════
+   GRÁFICO ACUMULADO
+═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   GANTT DE MANTENIMIENTOS
+═══════════════════════════════════════════ */
+function renderGantt(units,year){
+  const an=DATA[year].annual;
+  const activeUnits=units.filter(u=>an[u].active);
+  const PS=new Date(parseInt(year),0,1).getTime();
+  const PE=new Date(parseInt(year)+1,0,1).getTime();
+  const dur=PE-PS;
+  const isLeap=parseInt(year)%4===0;
+  const daysInMonth=[31,isLeap?29:28,31,30,31,30,31,31,30,31,30,31];
+  const totalDays=daysInMonth.reduce((a,b)=>a+b,0);
+
+  const UNIT_COLORS={
+    CTM3:'#3498db', CTA:'#2ecc71', CTH:'#9b59b6',
+    IEM:'#f5a623', CTM1:'#1abc9c', CTM2:'#e67e22',
+    U16:'#e74c3c', TG3:'#f39c12', TG1:'#00bcd4', TG2:'#8e44ad'
+  };
+  const nowMs=new Date().getTime();
+
+  const svg=document.getElementById('ganttSvg');
+  const ROW=36, HEAD=28, FOOT=26, LBL=58;
+  const W=1200, H=HEAD+activeUnits.length*ROW+FOOT;
+  svg.setAttribute('viewBox',`0 0 ${W+LBL} ${H}`);
+  svg.setAttribute('height', H);
+  svg.setAttribute('preserveAspectRatio','none');
+  svg.style.width='100%';
+
+  const xS=t=>LBL+Math.max(0,Math.min(W,(t-PS)/dur*W));
+  const MONO='Share Tech Mono,monospace';
+  const HEAD_C='Barlow Condensed,sans-serif';
+
+  let out=`<rect x="0" y="0" width="${W+LBL}" height="${H}" fill="#07090d"/>`;
+
+  // Líneas de mes y etiquetas superiores
+  let cumDay=0;
+  daysInMonth.forEach((d,i)=>{
+    const xM=LBL+cumDay/totalDays*W;
+    const xMid=LBL+(cumDay+d/2)/totalDays*W;
+    out+=`<line x1="${xM.toFixed(1)}" y1="${HEAD}" x2="${xM.toFixed(1)}" y2="${H-FOOT}" stroke="#1a2130" stroke-width="1"/>`;
+    out+=`<text x="${xMid.toFixed(1)}" y="${HEAD-8}" text-anchor="middle" fill="#9ab0c0" font-size="11" font-family="${MONO}">${MONTHS[i]}</text>`;
+    cumDay+=d;
+  });
+  out+=`<line x1="${(LBL+W).toFixed(1)}" y1="${HEAD}" x2="${(LBL+W).toFixed(1)}" y2="${H-FOOT}" stroke="#1a2130" stroke-width="1"/>`;
+  out+=`<line x1="${LBL}" y1="${HEAD}" x2="${LBL+W}" y2="${HEAD}" stroke="#253040" stroke-width="1"/>`;
+
+  // Filas
+  activeUnits.forEach((u,ri)=>{
+    const y0=HEAD+ri*ROW;
+    const y1=y0+ROW;
+    const site=SITE_MAP[u];
+    const siteColor=site==='CEM'?'#3498db':'#9b59b6';
+    const barColor=UNIT_COLORS[u]||'#3498db';
+
+    if(ri%2===0) out+=`<rect x="${LBL}" y="${y0}" width="${W}" height="${ROW}" fill="rgba(255,255,255,0.015)"/>`;
+    out+=`<line x1="0" y1="${y1}" x2="${LBL+W}" y2="${y1}" stroke="#1a2130" stroke-width="1"/>`;
+
+    // Etiqueta
+    out+=`<text x="${LBL-5}" y="${y0+ROW/2+4}" text-anchor="end" fill="#fff" font-size="13" font-weight="bold" font-family="${HEAD_C}">${u}</text>`;
+    out+=`<text x="${LBL-5}" y="${y0+ROW/2+17}" text-anchor="end" fill="${siteColor}" font-size="11" font-weight="bold" font-family="${MONO}">${site}</text>`;
+
+    // Bloques PM con color por unidad + achurado según estado
+    const pmU=RAW.allPM.filter(m=>m.unidad===u);
+    pmU.forEach((pm,pi)=>{
+      const ps=Math.max(pm.start,PS), pe=Math.min(pm.end,PE);
+      if(pe<=ps) return;
+      const x0=xS(ps), x1=xS(pe);
+      const bw=Math.max(x1-x0,2);
+      const bh=ROW*0.62, by=y0+(ROW-bh)/2;
+      const patId=`hatch_${u}_${pi}`;
+
+      const isCompleted = nowMs > pm.end;
+      const isInProgress = nowMs >= pm.start && nowMs <= pm.end;
+
+      // Patrón achurado único por barra
+      if(isCompleted || isInProgress){
+        out+=`<defs>
+          <pattern id="${patId}" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="8" stroke="${barColor}" stroke-width="2.5" opacity="0.55"/>
+          </pattern>
+          <clipPath id="clip_${patId}">
+            <rect x="${x0.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3"/>
+          </clipPath>
+        </defs>`;
+      }
+
+      // Fondo base de la barra
+      out+=`<rect x="${x0.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${barColor}${isCompleted?'44':'88'}" stroke="${barColor}" stroke-width="1.2"/>`;
+
+      if(isCompleted){
+        // Todo achurado
+        out+=`<rect x="${x0.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="url(#${patId})" clip-path="url(#clip_${patId})"/>`;
+      } else if(isInProgress){
+        // Solo achurar la parte ya transcurrida
+        const xNowPx=Math.min(xS(nowMs),x1);
+        const pastW=Math.max(xNowPx-x0,0);
+        if(pastW>0){
+          out+=`<rect x="${x0.toFixed(1)}" y="${by.toFixed(1)}" width="${pastW.toFixed(1)}" height="${bh.toFixed(1)}" fill="url(#${patId})" clip-path="url(#clip_${patId})"/>`;
+        }
+      }
+
+      // Fecha y duración
+      const dds=String(new Date(ps).getDate()).padStart(2,'0');
+      const dms=String(new Date(ps).getMonth()+1).padStart(2,'0');
+      const dde=String(new Date(pe).getDate()).padStart(2,'0');
+      const dme=String(new Date(pe).getMonth()+1).padStart(2,'0');
+      const durDays=Math.round((pe-ps)/86400000);
+      const lblTxt=`${dds}/${dms}→${dde}/${dme} (${durDays}d)`;
+      const lblAlpha=isCompleted?'99':'ff';
+      out+=`<text x="${(x1+6).toFixed(1)}" y="${(by+bh/2+4).toFixed(1)}" text-anchor="start" fill="#ffffff${lblAlpha}" font-size="12" font-weight="bold" font-family="${MONO}">${lblTxt}</text>`;
+      // Overlay transparente para capturar hover con motivo
+      const motivo=(pm.motivo||'Sin descripción').replace(/"/g,'&quot;');
+      out+=`<rect class="gantt-hover" x="${x0.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="transparent" data-unidad="${u}" data-motivo="${motivo}" style="cursor:pointer;"/>`;
+    });
+  });
+
+  // Eje inferior
+  out+=`<line x1="${LBL}" y1="${H-FOOT}" x2="${LBL+W}" y2="${H-FOOT}" stroke="#253040" stroke-width="1"/>`;
+  cumDay=0;
+  daysInMonth.forEach((d,i)=>{
+    const xM=LBL+cumDay/totalDays*W;
+    out+=`<text x="${(xM+2).toFixed(1)}" y="${H-FOOT+15}" fill="#9ab0c0" font-size="9" font-family="${MONO}">${cumDay+1}</text>`;
+    cumDay+=d;
+  });
+
+  // Hoy
+  const now=new Date();
+  if(now.getTime()>=PS&&now.getTime()<PE){
+    const xNow=xS(now.getTime());
+    out+=`<line x1="${xNow.toFixed(1)}" y1="${HEAD}" x2="${xNow.toFixed(1)}" y2="${H-FOOT}" stroke="#f5a623" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.85"/>`;
+    out+=`<text x="${xNow.toFixed(1)}" y="${HEAD-10}" text-anchor="middle" fill="#f5a623" font-size="10" font-weight="bold" font-family="${MONO}">HOY</text>`;
+  }
+
+  svg.innerHTML=out;
+
+  // ── Tooltip hover ──
+  const tooltip=document.getElementById('ganttTooltip');
+  svg.querySelectorAll('.gantt-hover').forEach(el=>{
+    el.addEventListener('mouseenter', e=>{
+      const u=el.dataset.unidad;
+      const m=el.dataset.motivo||'Sin descripción';
+      tooltip.innerHTML=`<span style="color:var(--accent);font-weight:700">${u}</span><br>${m}`;
+      tooltip.style.display='block';
+    });
+    el.addEventListener('mousemove', e=>{
+      const pad=14;
+      let x=e.clientX+pad, y=e.clientY-40;
+      const tw=tooltip.offsetWidth, th=tooltip.offsetHeight;
+      if(x+tw>window.innerWidth-pad) x=e.clientX-tw-pad;
+      if(y+th>window.innerHeight-pad) y=e.clientY-th-pad;
+      tooltip.style.left=x+'px';
+      tooltip.style.top=y+'px';
+    });
+    el.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
+  });
+
+  // ── Resumen de mantenimientos en curso ──
+  const summary=document.getElementById('ganttSummary');
+  const inProgress=[];
+  activeUnits.forEach(u=>{
+    const barColor=UNIT_COLORS[u]||'#3498db';
+    RAW.allPM.filter(m=>m.unidad===u).forEach(pm=>{
+      const ps=Math.max(pm.start,PS), pe=Math.min(pm.end,PE);
+      if(pe<=ps) return;
+      if(nowMs>=pm.start&&nowMs<=pm.end){
+        const diasTotal=Math.round((pm.end-pm.start)/86400000);
+        const diasCurso=Math.round((nowMs-pm.start)/86400000);
+        inProgress.push({u,diasCurso,diasTotal,barColor});
+      }
+    });
+  });
+
+  if(!inProgress.length){
+    summary.innerHTML='';
+  } else {
+    summary.innerHTML=inProgress.map(m=>`
+      <div style="display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid ${m.barColor}55;border-left:3px solid ${m.barColor};padding:8px 16px;border-radius:3px;">
+        <span style="font-family:var(--head);font-size:18px;font-weight:900;color:#fff">${m.u}</span>
+        <span style="font-family:var(--mono);font-size:15px;color:${m.barColor};font-weight:700">${m.diasCurso}d</span>
+        <span style="font-family:var(--mono);font-size:14px;color:var(--muted)">de ${m.diasTotal}d</span>
+        <div style="width:70px;height:6px;background:var(--border);border-radius:2px;overflow:hidden;">
+          <div style="height:100%;width:${Math.min(m.diasCurso/m.diasTotal*100,100).toFixed(0)}%;background:${m.barColor};border-radius:2px;"></div>
+        </div>
+        <span style="font-family:var(--mono);font-size:14px;color:var(--muted)">${Math.round(m.diasCurso/m.diasTotal*100)}%</span>
+      </div>`).join('');
+  }
+}
+
+function cumScopeUnits(year){
+  return scopeUnits().filter(u=>DATA[year].annual[u]?.active);
+}
+
+function interpolateCum(pts,x,field){
+  if(!pts||!pts.length) return 0;
+  for(let i=1;i<pts.length;i++){
+    if(pts[i].x>=x){
+      const t=(x-pts[i-1].x)/(pts[i].x-pts[i-1].x||1);
+      return pts[i-1][field]+t*(pts[i][field]-pts[i-1][field]);
+    }
+  }
+  return pts[pts.length-1][field];
+}
+
+function buildAggCumulative(units,year,nPts=183){
+  const an=DATA[year].annual;
+  const result=[];
+  for(let i=0;i<=nPts;i++){
+    const x=i/nPts;
+    let totEInd=0,totETeo=0;
+    units.forEach(u=>{
+      const d=an[u]; if(!d||!d.active) return;
+      const cp=d.cumPts; if(!cp) return;
+      // Sumar E_ind y E_teo transcurridos para agregación correcta
+      totEInd+=interpolateCum(cp,x,'eInd');
+      totETeo+=interpolateCum(cp,x,'eTeo');
+    });
+    result.push({x,y:totETeo>0?round2(Math.min(totEInd/totETeo*100,100)):0,eInd:totEInd,eTeo:totETeo});
+  }
+  return result;
+}
+
+function renderCumChart(year){
+  const an=DATA[year].annual;
+  // Usa el scope global — no tiene filtros propios
+  let pts;
+  if(selScope==='unit') pts=an[selUnit]?.cumPts||[{x:0,y:0,eInd:0,eTeo:0},{x:1,y:0,eInd:0,eTeo:0}];
+  else pts=buildAggCumulative(cumScopeUnits(year),year);
+
+  /* SVG — dos líneas: IND (color dinámico) + DISP (azul) */
+  const svg=document.getElementById('cumChartSvg');
+  const W=900,H=180,OX=60,OY=10;
+  const rawMax=Math.max(...pts.map(p=>p.y),0.1);
+
+  function niceMax(v){
+    if(v<=0) return 1;
+    const exp=Math.floor(Math.log10(v));
+    const factor=Math.pow(10,exp);
+    const norm=v/factor;
+    const nice=norm<=1?1:norm<=2?2:norm<=5?5:10;
+    return nice*factor;
+  }
+  const chartMax=Math.min(niceMax(rawMax*1.4),100);
+  const decimals=2;
+
+  const xS=x=>OX+x*W;
+  const yS=y=>OY+H-(y/chartMax)*H;
+
+  /* Eje X: 1 de cada mes con fecha */
+  const isLeap=parseInt(year)%4===0;
+  const daysInMonth=[31,isLeap?29:28,31,30,31,30,31,31,30,31,30,31];
+  const totalDays=daysInMonth.reduce((a,b)=>a+b,0);
+  let cumDay=0;
+  const xLabels=daysInMonth.map((d,i)=>{
+    const xFrac=cumDay/totalDays;
+    const x=xS(xFrac);
+    const label=`01-${MONTHS[i]}`;
+    const out=`<line x1="${x.toFixed(1)}" y1="${OY}" x2="${x.toFixed(1)}" y2="${OY+H+4}" stroke="#253040" stroke-width="1"/>
+      <text x="${x.toFixed(0)}" y="${OY+H+18}" text-anchor="middle" fill="#9ab0c0" font-size="11" font-family="Share Tech Mono,monospace" transform="rotate(-35,${x.toFixed(0)},${OY+H+18})">${label}</text>`;
+    cumDay+=d;
+    return out;
+  }).join('');
+
+  /* Grid Y */
+  const nGrid=5;
+  const yGrid=Array.from({length:nGrid+1},(_,i)=>{
+    const pct=i/nGrid*chartMax;
+    const y=yS(pct);
+    return `<line x1="${OX}" y1="${y.toFixed(1)}" x2="${OX+W}" y2="${y.toFixed(1)}" stroke="#1a2130" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="${OX-6}" y="${(y+4).toFixed(0)}" text-anchor="end" fill="#9ab0c0" font-size="11" font-family="Share Tech Mono,monospace">${pct.toFixed(decimals)}%</text>`;
+  }).join('');
+
+  /* Línea IND */
+  const finalVal=pts[pts.length-1]?.y||0;
+  const lineColor=finalVal>=30?'#e74c3c':finalVal>=5?'#f5a623':'#2ecc71';
+  const pathIND=pts.map((p,i)=>`${i===0?'M':'L'}${xS(p.x).toFixed(1)},${yS(p.y).toFixed(1)}`).join(' ');
+  const fillIND=pathIND+` L${xS(pts[pts.length-1].x).toFixed(1)},${yS(0).toFixed(1)} L${xS(0).toFixed(1)},${yS(0).toFixed(1)} Z`;
+
+  // Eje DISP espejado: dispMin=100-chartMax, dispMax=100
+  const dispMin=100-chartMax;
+  const ySD=y=>OY+H-((y-dispMin)/chartMax)*H;
+  const pathDISP=pts.map((p,i)=>`${i===0?'M':'L'}${xS(p.x).toFixed(1)},${ySD(100-p.y).toFixed(1)}`).join(' ');
+  const finalDisp=100-finalVal;
+  const finalX=xS(pts[pts.length-1].x);
+  const finalYIND=yS(finalVal);
+  const finalYDISP=ySD(finalDisp);
+
+  /* Eje Y derecho (DISP) — escala espejada cerca de 100% */
+  const yAxisR=Array.from({length:nGrid+1},(_,i)=>{
+    const pct=dispMin+i/nGrid*chartMax;
+    const y=ySD(pct);
+    return `<text x="${OX+W+6}" y="${(y+4).toFixed(0)}" text-anchor="start" fill="#3498db88" font-size="11" font-family="Share Tech Mono,monospace">${pct.toFixed(decimals)}%</text>`;
+  }).join('');
+
+  // IND: etiqueta SOBRE la curva (y - offset)
+  // DISP: etiqueta BAJO la curva (y + offset)
+  // Ambas ancladas lejos del eje derecho
+  const lblX=(finalX-16).toFixed(0);
+  const adjINDy =(finalYIND-10).toFixed(0);
+  const adjDISPy=(finalYDISP+16).toFixed(0);
+
+  /* ── Línea de HOY (solo si el año seleccionado es el año actual) ── */
+  const todayLine=(()=>{
+    const now=new Date();
+    const yearStart=new Date(parseInt(year),0,1);
+    const yearEnd  =new Date(parseInt(year)+1,0,1);
+    if(now<yearStart||now>=yearEnd) return ''; // año pasado/futuro → sin línea
+    const xNow=(now-yearStart)/(yearEnd-yearStart);
+    const xPx=xS(xNow);
+
+    // Interpolar valores de IND y DISP en ese instante
+    const indNow=interpolateCum(pts,xNow,'y');
+    const dispNow=100-indNow;
+    const yIND=yS(indNow);
+    const yDISP=ySD(dispNow);
+
+    // Fecha formateada
+    const dd=String(now.getDate()).padStart(2,'0');
+    const mm=String(now.getMonth()+1).padStart(2,'0');
+    const aaaa=now.getFullYear();
+    const fechaHoy=`${dd}/${mm}/${aaaa}`;
+
+    // Pills: ancho dinámico uniforme para valores, ancho fijo para fechas
+    const fs=11, charW=fs*0.63, PILL_H=18;
+    // Calcular el ancho mínimo que englobe todos los textos (fecha, DISP e IND)
+    const sampleDisp=`DISP ${dispNow.toFixed(decimals)}%`;
+    const sampleIND =`IND ${indNow.toFixed(decimals)}%`;
+    const VAL_W=Math.round(Math.max(sampleDisp.length,sampleIND.length,fechaHoy.length)*charW+18);
+
+    function pill(cx,cy,txt,col){
+      return `<rect x="${(cx-VAL_W/2).toFixed(1)}" y="${(cy-PILL_H+3).toFixed(1)}"
+        width="${VAL_W}" height="${PILL_H}" rx="${(PILL_H/2).toFixed(1)}"
+        fill="rgba(0,0,0,0.60)" stroke="${col}" stroke-width="1"/>
+      <text x="${cx.toFixed(1)}" y="${(cy-2).toFixed(1)}" text-anchor="middle"
+        fill="${col}" font-size="${fs}" font-weight="bold"
+        font-family="Share Tech Mono,monospace">${txt}</text>`;
+    }
+    function datePill(cx,txt,col){
+      return `<rect x="${(cx-VAL_W/2).toFixed(1)}" y="${(OY+4).toFixed(1)}"
+        width="${VAL_W}" height="${PILL_H}" rx="${(PILL_H/2).toFixed(1)}"
+        fill="rgba(0,0,0,0.60)" stroke="${col}" stroke-width="1"/>
+      <text x="${cx.toFixed(1)}" y="${(OY+PILL_H-1).toFixed(1)}" text-anchor="middle"
+        fill="${col}" font-size="${fs}" font-weight="bold"
+        font-family="Share Tech Mono,monospace">${txt}</text>`;
+    }
+
+    // ── Fin de mes (o siguiente si hoy es último día del mes) ──
+    const lastOfCurr=new Date(now.getFullYear(),now.getMonth()+1,0);
+    const isLastDay=now.getDate()===lastOfCurr.getDate();
+    const eomDate=isLastDay
+      ? new Date(now.getFullYear(),now.getMonth()+2,0)
+      : lastOfCurr;
+
+    let eomLine='';
+    if(eomDate<yearEnd){
+      const xEom=(eomDate-yearStart)/(yearEnd-yearStart);
+      const xEomPx=xS(xEom);
+      const indEom=interpolateCum(pts,xEom,'y');
+      const dispEom=100-indEom;
+      const eomDD=String(eomDate.getDate()).padStart(2,'0');
+      const eomMM=String(eomDate.getMonth()+1).padStart(2,'0');
+      const eomLabel=`${eomDD}/${eomMM}/${eomDate.getFullYear()}`;
+      const ex=xEomPx+VAL_W/2+10;
+      const yDISPeom=ySD(dispEom), yINDeom=yS(indEom);
+      eomLine=`
+        <line x1="${xEomPx.toFixed(1)}" y1="${OY}" x2="${xEomPx.toFixed(1)}" y2="${OY+H}"
+              stroke="#9b59b6" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.85"/>
+        ${datePill(ex, eomLabel, '#9b59b6')}
+        <circle cx="${xEomPx.toFixed(1)}" cy="${yDISPeom.toFixed(1)}" r="4" fill="#3498db" stroke="#07090d" stroke-width="2"/>
+        ${pill(ex, yDISPeom+16, `DISP ${dispEom.toFixed(decimals)}%`, '#3498db')}
+        <circle cx="${xEomPx.toFixed(1)}" cy="${yINDeom.toFixed(1)}" r="4" fill="${lineColor}" stroke="#07090d" stroke-width="2"/>
+        ${pill(ex, yINDeom-2,   `IND ${indEom.toFixed(decimals)}%`,   lineColor)}
+      `;
+    }
+
+    const tx=xPx-VAL_W/2-10;
+    return `
+      <line x1="${xPx.toFixed(1)}" y1="${OY}" x2="${xPx.toFixed(1)}" y2="${OY+H}"
+            stroke="#f5a623" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>
+      ${datePill(tx, fechaHoy, '#f5a623')}
+      <circle cx="${xPx.toFixed(1)}" cy="${yDISP.toFixed(1)}" r="4" fill="#3498db" stroke="#07090d" stroke-width="2"/>
+      ${pill(tx, yDISP+16, `DISP ${dispNow.toFixed(decimals)}%`,  '#3498db')}
+      <circle cx="${xPx.toFixed(1)}" cy="${yIND.toFixed(1)}" r="4" fill="${lineColor}" stroke="#07090d" stroke-width="2"/>
+      ${pill(tx, yIND-2,   `IND ${indNow.toFixed(decimals)}%`,    lineColor)}
+      ${eomLine}
+    `;
+  })();
+
+  svg.setAttribute('viewBox',`0 0 1000 ${H+60}`);
+  svg.innerHTML=`
+    ${xLabels}
+    ${yGrid}
+    ${yAxisR}
+    <path d="${fillIND}" fill="${lineColor}18" stroke="none"/>
+    <path d="${pathIND}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="${pathDISP}" fill="none" stroke="#3498db" stroke-width="1.8" stroke-linejoin="round" stroke-dasharray="6,3" opacity="0.8"/>
+    ${todayLine}
+    <g id="cumEomGroup">${
+      // eomLine ya construido en todayLine — separarlo como grupo propio
+      ''
+    }</g>
+    <g id="cumHoverGroup" style="display:none">
+      <line id="cumHoverLine" x1="0" y1="${OY}" x2="0" y2="${OY+H}" stroke="#fff" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+      <circle id="cumHoverDotIND" r="5" fill="${lineColor}" stroke="#07090d" stroke-width="2"/>
+      <circle id="cumHoverDotDISP" r="5" fill="#3498db" stroke="#07090d" stroke-width="2"/>
+      <rect id="cumHoverBgIND" rx="9" fill="rgba(0,0,0,0.7)" stroke="${lineColor}" stroke-width="1"/>
+      <text id="cumHoverTxtIND" text-anchor="middle" fill="${lineColor}" font-size="11" font-weight="bold" font-family="Share Tech Mono,monospace"/>
+      <rect id="cumHoverBgDISP" rx="9" fill="rgba(0,0,0,0.7)" stroke="#3498db" stroke-width="1"/>
+      <text id="cumHoverTxtDISP" text-anchor="middle" fill="#3498db" font-size="11" font-weight="bold" font-family="Share Tech Mono,monospace"/>
+    </g>
+    <circle cx="${finalX.toFixed(1)}" cy="${finalYIND.toFixed(1)}" r="4" fill="${lineColor}" stroke="#07090d" stroke-width="2"/>
+    <text x="${lblX}" y="${adjINDy}" text-anchor="end" fill="${lineColor}" font-size="12" font-weight="bold" font-family="Share Tech Mono,monospace">IND ${finalVal.toFixed(decimals)}%</text>
+    <circle cx="${finalX.toFixed(1)}" cy="${finalYDISP.toFixed(1)}" r="4" fill="#3498db" stroke="#07090d" stroke-width="2"/>
+    <text x="${lblX}" y="${adjDISPy}" text-anchor="end" fill="#3498db" font-size="12" font-weight="bold" font-family="Share Tech Mono,monospace">DISP ${finalDisp.toFixed(decimals)}%</text>
+    <!-- overlay hover capture -->
+    <rect id="cumHoverArea" x="${OX}" y="${OY}" width="${W}" height="${H}" fill="transparent" style="cursor:crosshair"/>
+  `;
+
+  // Rebuild eomLine inside its group (todayLine already in static HTML above)
+  // Re-inject eomLine into the group
+  document.getElementById('cumEomGroup').innerHTML = (() => {
+    const now2=new Date();
+    const yearStart2=new Date(parseInt(year),0,1);
+    const yearEnd2=new Date(parseInt(year)+1,0,1);
+    if(now2<yearStart2||now2>=yearEnd2) return '';
+    const lastOfCurr2=new Date(now2.getFullYear(),now2.getMonth()+1,0);
+    const isLastDay2=now2.getDate()===lastOfCurr2.getDate();
+    const eomDate2=isLastDay2?new Date(now2.getFullYear(),now2.getMonth()+2,0):lastOfCurr2;
+    if(eomDate2>=yearEnd2) return '';
+    const xEom2=(eomDate2-yearStart2)/(yearEnd2-yearStart2);
+    const xEomPx2=xS(xEom2);
+    const indEom2=interpolateCum(pts,xEom2,'y');
+    const dispEom2=100-indEom2;
+    const eomDD2=String(eomDate2.getDate()).padStart(2,'0');
+    const eomMM2=String(eomDate2.getMonth()+1).padStart(2,'0');
+    const eomLabel2=`${eomDD2}/${eomMM2}/${eomDate2.getFullYear()}`;
+    const fs2=11,charW2=fs2*0.63,PILL_H2=18;
+    const sDisp2=`DISP ${dispEom2.toFixed(decimals)}%`;
+    const sIND2=`IND ${indEom2.toFixed(decimals)}%`;
+    const VAL_W2=Math.round(Math.max(sDisp2.length,sIND2.length,eomLabel2.length)*charW2+18);
+    const ex2=xEomPx2+VAL_W2/2+10;
+    const yDISPeom2=ySD(dispEom2), yINDeom2=yS(indEom2);
+    const ph2=v=>`<rect x="${(v-VAL_W2/2).toFixed(1)}" y="${(OY+4).toFixed(1)}" width="${VAL_W2}" height="${PILL_H2}" rx="${(PILL_H2/2).toFixed(1)}" fill="rgba(0,0,0,0.6)" stroke="#9b59b6" stroke-width="1"/>`;
+    const pv2=(cx,cy,txt,col)=>`<rect x="${(cx-VAL_W2/2).toFixed(1)}" y="${(cy-PILL_H2+3).toFixed(1)}" width="${VAL_W2}" height="${PILL_H2}" rx="${(PILL_H2/2).toFixed(1)}" fill="rgba(0,0,0,0.6)" stroke="${col}" stroke-width="1"/><text x="${cx.toFixed(1)}" y="${(cy-2).toFixed(1)}" text-anchor="middle" fill="${col}" font-size="${fs2}" font-weight="bold" font-family="Share Tech Mono,monospace">${txt}</text>`;
+    return `
+      <line x1="${xEomPx2.toFixed(1)}" y1="${OY}" x2="${xEomPx2.toFixed(1)}" y2="${OY+H}" stroke="#9b59b6" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.85"/>
+      ${ph2(ex2)}<text x="${ex2.toFixed(1)}" y="${(OY+PILL_H2-1).toFixed(1)}" text-anchor="middle" fill="#9b59b6" font-size="${fs2}" font-weight="bold" font-family="Share Tech Mono,monospace">${eomLabel2}</text>
+      <circle cx="${xEomPx2.toFixed(1)}" cy="${yDISPeom2.toFixed(1)}" r="4" fill="#3498db" stroke="#07090d" stroke-width="2"/>
+      ${pv2(ex2, yDISPeom2+16, `DISP ${dispEom2.toFixed(decimals)}%`, '#3498db')}
+      <circle cx="${xEomPx2.toFixed(1)}" cy="${yINDeom2.toFixed(1)}" r="4" fill="${lineColor}" stroke="#07090d" stroke-width="2"/>
+      ${pv2(ex2, yINDeom2-2, `IND ${indEom2.toFixed(decimals)}%`, lineColor)}
+    `;
+  })();
+
+  // ── Hover crosshair ──
+  const hoverArea=document.getElementById('cumHoverArea');
+  const hoverGrp=document.getElementById('cumHoverGroup');
+  const eomGrp=document.getElementById('cumEomGroup');
+  const hLine=document.getElementById('cumHoverLine');
+  const hDotIND=document.getElementById('cumHoverDotIND');
+  const hDotDISP=document.getElementById('cumHoverDotDISP');
+  const hBgIND=document.getElementById('cumHoverBgIND');
+  const hTxtIND=document.getElementById('cumHoverTxtIND');
+  const hBgDISP=document.getElementById('cumHoverBgDISP');
+  const hTxtDISP=document.getElementById('cumHoverTxtDISP');
+
+  const PW=18, PH=18; // pill width/height half
+
+  hoverArea.addEventListener('mousemove', e=>{
+    const rect=svg.getBoundingClientRect();
+    const scaleX=(OX+W)/rect.width;
+    const mx=(e.clientX-rect.left)*scaleX;
+    const xFrac=Math.max(0,Math.min(1,(mx-OX)/W));
+    const indV=interpolateCum(pts,xFrac,'y');
+    const dispV=100-indV;
+    const px=xS(xFrac);
+    const pyIND=yS(indV);
+    const pyDISP=ySD(dispV);
+    const txtIND=`IND ${indV.toFixed(decimals+1)}%`;
+    const txtDISP=`DISP ${dispV.toFixed(decimals+1)}%`;
+    const fs=11,cw=fs*0.63,ph=18;
+    const vw=Math.round(Math.max(txtIND.length,txtDISP.length)*cw+18);
+    // Position pills: right of line unless near right edge
+    const pillX=px+vw/2+8>OX+W ? px-vw/2-8 : px+vw/2+8;
+
+    hLine.setAttribute('x1',px.toFixed(1)); hLine.setAttribute('x2',px.toFixed(1));
+    hDotIND.setAttribute('cx',px.toFixed(1)); hDotIND.setAttribute('cy',pyIND.toFixed(1));
+    hDotDISP.setAttribute('cx',px.toFixed(1)); hDotDISP.setAttribute('cy',pyDISP.toFixed(1));
+    // IND pill
+    hBgIND.setAttribute('x',(pillX-vw/2).toFixed(1)); hBgIND.setAttribute('y',(pyIND-ph+3).toFixed(1));
+    hBgIND.setAttribute('width',vw); hBgIND.setAttribute('height',ph);
+    hTxtIND.setAttribute('x',pillX.toFixed(1)); hTxtIND.setAttribute('y',(pyIND-2).toFixed(1));
+    hTxtIND.textContent=txtIND;
+    // DISP pill
+    hBgDISP.setAttribute('x',(pillX-vw/2).toFixed(1)); hBgDISP.setAttribute('y',(pyDISP-ph+3).toFixed(1));
+    hBgDISP.setAttribute('width',vw); hBgDISP.setAttribute('height',ph);
+    hTxtDISP.setAttribute('x',pillX.toFixed(1)); hTxtDISP.setAttribute('y',(pyDISP-2).toFixed(1));
+    hTxtDISP.textContent=txtDISP;
+
+    hoverGrp.style.display='';
+    eomGrp.style.display='none';
+  });
+  hoverArea.addEventListener('mouseleave', ()=>{
+    hoverGrp.style.display='none';
+    eomGrp.style.display='';
+  });
+}
+
+function setMonthSel(m){
+  selMonth=m;
+  if(m!==null){selMonthKPI=m;selKPIMonth=null;selKPIMonthToday=null;}
+  renderChartSection(scopeUnits(),selYear);
+  renderKPIMonth(scopeUnits(),selYear);
+}
+
+function renderMonthGantt(units,year,month){
+  const an=DATA[year].annual;
+  const mStart=new Date(parseInt(year),month,1).getTime();
+  const mEnd=new Date(parseInt(year),month+1,1).getTime();
+  const totalMs=mEnd-mStart;
+  const daysInMonth=new Date(parseInt(year),month+1,0).getDate();
+  const MONO='Share Tech Mono,monospace';
+  const HEAD_C='Barlow Condensed,sans-serif';
+  const UNIT_COLORS={CTM3:'#3498db',CTA:'#2ecc71',CTH:'#9b59b6',IEM:'#f5a623',CTM1:'#1abc9c',CTM2:'#e67e22',U16:'#e74c3c',TG3:'#f39c12',TG1:'#00bcd4',TG2:'#8e44ad'};
+  const EVT_COLORS={fo:'rgba(231,76,60,.85)',lf:'rgba(245,166,35,.85)',pm:'rgba(52,152,219,.7)'};
+
+  const activeUnits=units.filter(u=>an[u].active&&DATA[year].monthly[u][month]!=null);
+  const ROW=40, HEAD=28, FOOT=30, LBL=58, W=1200;
+  const H=HEAD+activeUnits.length*ROW+FOOT;
+
+  const xS=t=>LBL+Math.max(0,Math.min(W,(t-mStart)/totalMs*W));
+
+  let out=`<rect x="0" y="0" width="${W+LBL}" height="${H}" fill="#07090d"/>`;
+
+  // Líneas de día
+  for(let d=0;d<=daysInMonth;d++){
+    const xD=LBL+d/daysInMonth*W;
+    out+=`<line x1="${xD.toFixed(1)}" y1="${HEAD}" x2="${xD.toFixed(1)}" y2="${H-FOOT}" stroke="#1a2130" stroke-width="1"/>`;
+    if(d<daysInMonth){
+      const xMid=LBL+(d+0.5)/daysInMonth*W;
+      out+=`<text x="${xMid.toFixed(1)}" y="${HEAD-8}" text-anchor="middle" fill="#9ab0c0" font-size="10" font-family="${MONO}">${d+1}</text>`;
+    }
+  }
+  out+=`<line x1="${LBL}" y1="${HEAD}" x2="${LBL+W}" y2="${HEAD}" stroke="#253040" stroke-width="1"/>`;
+
+  activeUnits.forEach((u,ri)=>{
+    const y0=HEAD+ri*ROW, y1=y0+ROW;
+    const site=SITE_MAP[u];
+    const siteColor=site==='CEM'?'#3498db':'#9b59b6';
+    const uEvs=RAW.allEvents.filter(e=>e.unidad===u);
+    const pmU=RAW.allPM.filter(m=>m.unidad===u);
+    const mo=DATA[year].monthly[u][month];
+
+    if(ri%2===0) out+=`<rect x="${LBL}" y="${y0}" width="${W}" height="${ROW}" fill="rgba(255,255,255,0.015)"/>`;
+    out+=`<line x1="0" y1="${y1}" x2="${LBL+W}" y2="${y1}" stroke="#1a2130" stroke-width="1"/>`;
+    out+=`<text x="${LBL-5}" y="${y0+ROW/2+4}" text-anchor="end" fill="#fff" font-size="13" font-weight="bold" font-family="${HEAD_C}">${u}</text>`;
+    out+=`<text x="${LBL-5}" y="${y0+ROW/2+16}" text-anchor="end" fill="${siteColor}" font-size="10" font-family="${MONO}">${site}</text>`;
+
+    // IND del mes — 3 columnas: Unidad, Sitio, Flota
+    const indM=mo?.ind;
+    const indTxt=indM==='PM'?'PM':indM!=null?indM.toFixed(2)+'%':'—';
+    const indCol=indM==='PM'?'var(--blue)':indM>=5?'var(--accent)':'var(--green)';
+    const MC1=LBL+W+6, MC2=LBL+W+66, MC3=LBL+W+126;
+    out+=`<text x="${MC1}" y="${y0+ROW/2+5}" fill="${indCol}" font-size="11" font-weight="bold" font-family="${MONO}">${indTxt}</text>`;
+
+    // IND Sitio del mes
+    const mSiteUnits=(site==='CEM'?CEM:CET).filter(uu=>an[uu]?.active&&DATA[year].monthly[uu][month]!=null);
+    let sEindM=0,sEteoM=0;
+    mSiteUnits.forEach(uu=>{const mmo=DATA[year].monthly[uu][month];if(mmo&&mmo.ind!=='PM'&&mmo.eTeo>0){sEindM+=mmo.eTeo*(mmo.ind/100);sEteoM+=mmo.eTeo;}});
+    const sIndM=sEteoM>0?Math.min(sEindM/sEteoM*100,100):0;
+    const sIndMCol=sIndM>=5?'#f5a623':'#2ecc71';
+    out+=`<text x="${MC2}" y="${y0+ROW/2+5}" fill="${sIndMCol}" font-size="11" font-family="${MONO}" opacity="0.7">${sIndM.toFixed(2)}%</text>`;
+
+    // IND Flota del mes
+    let fEindM=0,fEteoM=0;
+    activeUnits.forEach(uu=>{const mmo=DATA[year].monthly[uu][month];if(mmo&&mmo.ind!=='PM'&&mmo.eTeo>0){fEindM+=mmo.eTeo*(mmo.ind/100);fEteoM+=mmo.eTeo;}});
+    const fIndM=fEteoM>0?Math.min(fEindM/fEteoM*100,100):0;
+    const fIndMCol=fIndM>=5?'#f5a623':'#2ecc71';
+    out+=`<text x="${MC3}" y="${y0+ROW/2+5}" fill="${fIndMCol}" font-size="11" font-family="${MONO}" opacity="0.5">${fIndM.toFixed(2)}%</text>`;
+
+    const bh=ROW*0.55, by=y0+(ROW-bh)/2;
+
+    // Segmentos cronológicos del mes
+    const segs=mo?.segs||[];
+    let tAcc=mStart;
+    segs.forEach(seg=>{
+      const segMs=seg.pct/100*totalMs;
+      const x0=xS(tAcc), x1=xS(tAcc+segMs);
+      const bw=Math.max(x1-x0,1);
+      const col=seg.type==='hs'?'rgba(46,204,113,.35)':EVT_COLORS[seg.type]||'#555';
+      out+=`<rect x="${x0.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
+      tAcc+=segMs;
+    });
+    // Stroke sobre la barra completa
+    out+=`<rect x="${xS(mStart).toFixed(1)}" y="${by.toFixed(1)}" width="${W.toFixed(1)}" height="${bh.toFixed(1)}" fill="none" stroke="#253040" stroke-width="0.5"/>`;
+  });
+
+  // Eje inferior — fechas semana
+  out+=`<line x1="${LBL}" y1="${H-FOOT}" x2="${LBL+W}" y2="${H-FOOT}" stroke="#253040" stroke-width="1"/>`;
+  for(let d=0;d<daysInMonth;d+=7){
+    const xD=LBL+d/daysInMonth*W;
+    const dt=new Date(parseInt(year),month,d+1);
+    out+=`<text x="${(xD+4).toFixed(1)}" y="${H-FOOT+16}" fill="#9ab0c0" font-size="10" font-family="${MONO}">${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}</text>`;
+  }
+
+  // Hoy
+  const nowMs=new Date().getTime();
+  if(nowMs>=mStart&&nowMs<mEnd){
+    const xNow=xS(nowMs);
+    out+=`<line x1="${xNow.toFixed(1)}" y1="${HEAD}" x2="${xNow.toFixed(1)}" y2="${H-FOOT}" stroke="#f5a623" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.85"/>`;
+    out+=`<text x="${xNow.toFixed(1)}" y="${HEAD-10}" text-anchor="middle" fill="#f5a623" font-size="10" font-weight="bold" font-family="${MONO}">HOY</text>`;
+  }
+
+  // Header IND cols
+  const MC1=LBL+W+6, MC2=LBL+W+66, MC3=LBL+W+126;
+  out+=`<text x="${MC1}" y="${HEAD-8}" fill="#9ab0c0" font-size="10" font-family="${MONO}">UNIDAD</text>`;
+  out+=`<text x="${MC2}" y="${HEAD-8}" fill="#9ab0c0" font-size="10" font-family="${MONO}">SITIO</text>`;
+  out+=`<text x="${MC3}" y="${HEAD-8}" fill="#9ab0c0" font-size="10" font-family="${MONO}">FLOTA</text>`;
+
+  // Totales por sitio y flota del mes
+  const cemUnitsM=activeUnits.filter(u=>SITE_MAP[u]==='CEM');
+  const cetUnitsM=activeUnits.filter(u=>SITE_MAP[u]==='CET');
+  let cemEiM=0,cemEtM=0,cetEiM=0,cetEtM=0,fltEiM=0,fltEtM=0;
+  activeUnits.forEach(u=>{
+    const mo=DATA[year].monthly[u][month];
+    if(mo&&mo.ind!=='PM'&&mo.eTeo>0){
+      const ei=mo.eTeo*(mo.ind/100);
+      fltEiM+=ei; fltEtM+=mo.eTeo;
+      if(SITE_MAP[u]==='CEM'){cemEiM+=ei;cemEtM+=mo.eTeo;}
+      else{cetEiM+=ei;cetEtM+=mo.eTeo;}
+    }
+  });
+  const cemIndM=cemEtM>0?cemEiM/cemEtM*100:0;
+  const cetIndM=cetEtM>0?cetEiM/cetEtM*100:0;
+  const fltIndM=fltEtM>0?fltEiM/fltEtM*100:0;
+
+  out+=`<line x1="${LBL}" y1="${H-FOOT}" x2="${MC3+55}" y2="${H-FOOT}" stroke="#253040" stroke-width="1"/>`;
+  out+=`<text x="${LBL-5}" y="${H-FOOT+15}" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="Barlow Condensed,sans-serif">TOTAL</text>`;
+  out+=`<text x="${MC1}" y="${H-FOOT+15}" fill="#3498db" font-size="10" font-family="${MONO}">CEM</text>`;
+  out+=`<text x="${MC2}" y="${H-FOOT+15}" fill="#3498db" font-size="11" font-weight="bold" font-family="${MONO}">${cemIndM.toFixed(2)}%</text>`;
+  out+=`<text x="${MC3}" y="${H-FOOT+15}" fill="${fltIndM>=5?'#f5a623':'#2ecc71'}" font-size="11" font-weight="bold" font-family="${MONO}">${fltIndM.toFixed(2)}%</text>`;
+  out+=`<text x="${MC1}" y="${H-FOOT+28}" fill="#9b59b6" font-size="10" font-family="${MONO}">CET</text>`;
+  out+=`<text x="${MC2}" y="${H-FOOT+28}" fill="#9b59b6" font-size="11" font-weight="bold" font-family="${MONO}">${cetIndM.toFixed(2)}%</text>`;
+
+  return `<svg viewBox="0 0 ${W+LBL+180} ${H}" width="100%" height="${H}" style="display:block">${out}</svg>
+  <div class="chart-leg" style="margin-top:8px;">
+    <div class="leg-i"><div class="leg-d" style="background:rgba(46,204,113,.5);border:1px solid rgba(46,204,113,.6)"></div>Disponible</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(52,152,219,.65);border:1px solid rgba(52,152,219,.75)"></div>PM</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(245,166,35,.75);border:1px solid rgba(245,166,35,.85)"></div>LF</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(231,76,60,.8);border:1px solid rgba(231,76,60,.9)"></div>DF</div>
+  </div>`;
+}
+
+function renderYearGantt(units,year){
+  const an=DATA[year].annual;
+  const yStart=new Date(parseInt(year),0,1).getTime();
+  const yEnd=new Date(parseInt(year)+1,0,1).getTime();
+  const totalMs=yEnd-yStart;
+  const isLeap=parseInt(year)%4===0;
+  const daysInMonth=[31,isLeap?29:28,31,30,31,30,31,31,30,31,30,31];
+  const totalDays=daysInMonth.reduce((a,b)=>a+b,0);
+  const MONO='Share Tech Mono,monospace';
+  const HEAD_C='Barlow Condensed,sans-serif';
+
+  const activeUnits=units.filter(u=>an[u].active);
+  const ROW=38, HEAD=28, FOOT=30, LBL=58, W=1200;
+  const H=HEAD+activeUnits.length*ROW+FOOT;
+  const xS=t=>LBL+Math.max(0,Math.min(W,(t-yStart)/totalMs*W));
+
+  let out=`<rect x="0" y="0" width="${W+LBL+60}" height="${H}" fill="#07090d"/>`;
+
+  // Líneas y etiquetas de mes
+  let cumDay=0;
+  daysInMonth.forEach((d,i)=>{
+    const xM=LBL+cumDay/totalDays*W;
+    const xMid=LBL+(cumDay+d/2)/totalDays*W;
+    out+=`<line x1="${xM.toFixed(1)}" y1="${HEAD}" x2="${xM.toFixed(1)}" y2="${H-FOOT}" stroke="#253040" stroke-width="1"/>`;
+    out+=`<text x="${xMid.toFixed(1)}" y="${HEAD-8}" text-anchor="middle" fill="#9ab0c0" font-size="11" font-family="${MONO}">${MONTHS[i]}</text>`;
+    cumDay+=d;
+  });
+  out+=`<line x1="${(LBL+W).toFixed(1)}" y1="${HEAD}" x2="${(LBL+W).toFixed(1)}" y2="${H-FOOT}" stroke="#253040" stroke-width="1"/>`;
+  out+=`<line x1="${LBL}" y1="${HEAD}" x2="${LBL+W}" y2="${HEAD}" stroke="#253040" stroke-width="1"/>`;
+
+  activeUnits.forEach((u,ri)=>{
+    const y0=HEAD+ri*ROW, y1=y0+ROW;
+    const site=SITE_MAP[u];
+    const siteColor=site==='CEM'?'#3498db':'#9b59b6';
+    const bh=ROW*0.55, by=y0+(ROW-bh)/2;
+
+    if(ri%2===0) out+=`<rect x="${LBL}" y="${y0}" width="${W}" height="${ROW}" fill="rgba(255,255,255,0.015)"/>`;
+    out+=`<line x1="0" y1="${y1}" x2="${LBL+W}" y2="${y1}" stroke="#1a2130" stroke-width="1"/>`;
+    out+=`<text x="${LBL-5}" y="${y0+ROW/2+4}" text-anchor="end" fill="#fff" font-size="13" font-weight="bold" font-family="${HEAD_C}">${u}</text>`;
+    out+=`<text x="${LBL-5}" y="${y0+ROW/2+16}" text-anchor="end" fill="${siteColor}" font-size="10" font-family="${MONO}">${site}</text>`;
+
+    // IND anual — 3 columnas: Unidad, Sitio, Flota
+    const indA=an[u].ind;
+    const indColor=indA>=5?'var(--accent)':'var(--green)';
+    // IND Sitio
+    const siteUnits=(site==='CEM'?CEM:CET).filter(uu=>an[uu]?.active&&an[uu]?.eTeo>0);
+    const siteF=fleetInd(siteUnits,year);
+    const indSColor=siteF.ind>=5?'#f5a623':'#2ecc71';
+    // IND Flota
+    const fleetF=fleetInd(activeUnits,year);
+    const indFColor=fleetF.ind>=5?'#f5a623':'#2ecc71';
+
+    const COL1=LBL+W+6, COL2=LBL+W+66, COL3=LBL+W+126;
+    out+=`<text x="${COL1}" y="${y0+ROW/2+5}" fill="${indColor}" font-size="11" font-weight="bold" font-family="${MONO}">${indA!=null?indA.toFixed(2)+'%':'—'}</text>`;
+    out+=`<text x="${COL2}" y="${y0+ROW/2+5}" fill="${indSColor}" font-size="11" font-family="${MONO}" opacity="0.7">${siteF.ind.toFixed(2)}%</text>`;
+    out+=`<text x="${COL3}" y="${y0+ROW/2+5}" fill="${indFColor}" font-size="11" font-family="${MONO}" opacity="0.5">${fleetF.ind.toFixed(2)}%</text>`;
+
+    // Segmentos mes a mes
+    const monthly=DATA[year].monthly[u];
+    daysInMonth.forEach((d,mi)=>{
+      const mStart=new Date(parseInt(year),mi,1).getTime();
+      const mEnd=new Date(parseInt(year),mi+1,1).getTime();
+      const mo=monthly[mi];
+      if(!mo){ return; }
+      const mMs=mEnd-mStart;
+      let tAcc=mStart;
+      (mo.segs||[]).forEach(seg=>{
+        const segMs=seg.pct/100*mMs;
+        const x0=xS(tAcc), x1=xS(tAcc+segMs);
+        const bw=Math.max(x1-x0,0.5);
+        const col=seg.type==='hs'?'rgba(46,204,113,.4)':
+                  seg.type==='pm'?'rgba(52,152,219,.7)':
+                  seg.type==='lf'?'rgba(245,166,35,.85)':
+                  seg.type==='fo'?'rgba(231,76,60,.85)':'#333';
+        out+=`<rect x="${x0.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
+        tAcc+=segMs;
+      });
+    });
+    // Borde barra
+    out+=`<rect x="${xS(yStart).toFixed(1)}" y="${by.toFixed(1)}" width="${W}" height="${bh.toFixed(1)}" fill="none" stroke="#253040" stroke-width="0.5"/>`;
+  });
+
+  // Eje inferior — días 1 de cada mes
+  out+=`<line x1="${LBL}" y1="${H-FOOT}" x2="${LBL+W}" y2="${H-FOOT}" stroke="#253040" stroke-width="1"/>`;
+  cumDay=0;
+  daysInMonth.forEach((d,i)=>{
+    const xM=LBL+cumDay/totalDays*W;
+    out+=`<text x="${(xM+2).toFixed(1)}" y="${H-FOOT+15}" fill="#9ab0c0" font-size="9" font-family="${MONO}">${cumDay+1}</text>`;
+    cumDay+=d;
+  });
+
+  // Hoy
+  const nowMs=new Date().getTime();
+  if(nowMs>=yStart&&nowMs<yEnd){
+    const xNow=xS(nowMs);
+    out+=`<line x1="${xNow.toFixed(1)}" y1="${HEAD}" x2="${xNow.toFixed(1)}" y2="${H-FOOT}" stroke="#f5a623" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.85"/>`;
+    out+=`<text x="${xNow.toFixed(1)}" y="${HEAD-10}" text-anchor="middle" fill="#f5a623" font-size="10" font-weight="bold" font-family="${MONO}">HOY</text>`;
+  }
+
+  const COL1=LBL+W+6, COL2=LBL+W+66, COL3=LBL+W+126;
+  out+=`<text x="${COL1}" y="${HEAD-8}" fill="#9ab0c0" font-size="10" font-family="${MONO}">UNIDAD</text>`;
+  out+=`<text x="${COL2}" y="${HEAD-8}" fill="#9ab0c0" font-size="10" font-family="${MONO}">SITIO</text>`;
+  out+=`<text x="${COL3}" y="${HEAD-8}" fill="#9ab0c0" font-size="10" font-family="${MONO}">FLOTA</text>`;
+
+  // Totales por sitio y flota
+  const f2=fleetInd(activeUnits,year);
+  const cemUnits=activeUnits.filter(u=>SITE_MAP[u]==='CEM');
+  const cetUnits=activeUnits.filter(u=>SITE_MAP[u]==='CET');
+  const cemF=fleetInd(cemUnits,year);
+  const cetF=fleetInd(cetUnits,year);
+  const totalIndColor=f2.ind>=5?'#f5a623':'#2ecc71';
+  const cemIndColor=cemF.ind>=5?'#f5a623':'#2ecc71';
+  const cetIndColor=cetF.ind>=5?'#f5a623':'#2ecc71';
+
+  out+=`<line x1="${LBL}" y1="${H-FOOT}" x2="${COL3+55}" y2="${H-FOOT}" stroke="#253040" stroke-width="1"/>`;
+  out+=`<text x="${LBL-5}" y="${H-FOOT+15}" text-anchor="end" fill="#fff" font-size="12" font-weight="bold" font-family="${HEAD_C}">TOTAL</text>`;
+  out+=`<text x="${COL1}" y="${H-FOOT+15}" fill="#3498db" font-size="10" font-family="${MONO}">CEM</text>`;
+  out+=`<text x="${COL2}" y="${H-FOOT+15}" fill="#3498db" font-size="11" font-weight="bold" font-family="${MONO}">${cemF.ind.toFixed(2)}%</text>`;
+  out+=`<text x="${COL3}" y="${H-FOOT+15}" fill="${totalIndColor}" font-size="11" font-weight="bold" font-family="${MONO}">${f2.ind.toFixed(2)}%</text>`;
+  out+=`<text x="${COL1}" y="${H-FOOT+28}" fill="#9b59b6" font-size="10" font-family="${MONO}">CET</text>`;
+  out+=`<text x="${COL2}" y="${H-FOOT+28}" fill="#9b59b6" font-size="11" font-weight="bold" font-family="${MONO}">${cetF.ind.toFixed(2)}%</text>`;
+
+  return `<svg viewBox="0 0 ${W+LBL+180} ${H}" width="100%" height="${H}" style="display:block;">${out}</svg>
+  <div class="chart-leg" style="margin-top:8px;">
+    <div class="leg-i"><div class="leg-d" style="background:rgba(46,204,113,.5);border:1px solid rgba(46,204,113,.6)"></div>Disponible (DISP)</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(52,152,219,.65);border:1px solid rgba(52,152,219,.75)"></div>Mant. Prog. (PM)</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(245,166,35,.75);border:1px solid rgba(245,166,35,.85)"></div>Limitación (LF)</div>
+    <div class="leg-i"><div class="leg-d" style="background:rgba(231,76,60,.8);border:1px solid rgba(231,76,60,.9)"></div>Sal. Forzada (DF)</div>
+  </div>`;
+}
+
+function renderChartSection(units,year){
+  // Construir botones de mes
+  const mBtns=document.getElementById('mSelBtns');
+  const mAll=document.getElementById('mSelAll');
+  if(mBtns){
+    mBtns.innerHTML='';
+    MONTHS.forEach((m,i)=>{
+      const b=document.createElement('button');
+      b.className='ev-sort-btn'+(selMonth===i?' active':'');
+      b.textContent=m;
+      b.onclick=()=>setMonthSel(i);
+      mBtns.appendChild(b);
+    });
+  }
+  if(mAll) mAll.classList.toggle('active',selMonth===null);
+
+  const annualDiv=document.getElementById('chartAnnual');
+  const detailDiv=document.getElementById('chartMonthDetail');
+
+  if(selMonth!==null){
+    if(annualDiv) annualDiv.style.display='none';
+    if(detailDiv){ detailDiv.style.display='block'; detailDiv.innerHTML=renderMonthGantt(units.filter(u=>DATA[year].annual[u].active),year,selMonth); }
+  } else {
+    if(annualDiv){ annualDiv.style.display='block'; annualDiv.innerHTML=renderYearGantt(units.filter(u=>DATA[year].annual[u].active),year); }
+    if(detailDiv) detailDiv.style.display='none';
+  }
+}
+
+/* Agrega datos mensuales de múltiples unidades ponderando por energía teórica */
+function buildAggMonthly(units,year){
+  return Array.from({length:12},(_,m)=>{
+    let totHTW=0,totHfoW=0,totHlfW=0,totHpmW=0;
+    let totETeo=0,totEInd=0;
+    let hasData=false;
+    units.forEach(u=>{
+      const d=DATA[year].annual[u];
+      if(!d||!d.active) return;
+      const mo=DATA[year].monthly[u][m];
+      if(mo==null) return;
+      const Pn=d.pnet||0, ht=mo.ht||744, w=Pn*ht;
+      totHTW+=w; totHfoW+=mo.hfo*Pn; totHlfW+=mo.hlf*Pn; totHpmW+=mo.hpm*Pn;
+      if(mo.eTeo>0){
+        totETeo+=mo.eTeo;
+        if(mo.ind!=='PM'&&mo.ind!=null) totEInd+=mo.ind/100*mo.eTeo;
+      }
+      hasData=true;
+    });
+    if(!hasData||totHTW===0) return null;
+    const pFO=Math.min(totHfoW/totHTW*100,100);
+    const pLF=Math.min(totHlfW/totHTW*100,100);
+    const pPM=Math.min(totHpmW/totHTW*100,100);
+    const pHS=Math.max(100-pFO-pLF-pPM,0);
+    const ind=totETeo>0?round2(Math.min(totEInd/totETeo*100,100)):null;
+    const segs=[];
+    if(pHS>0.05) segs.push({type:'hs',pct:round2(pHS)});
+    if(pPM>0.05) segs.push({type:'pm',pct:round2(pPM)});
+    if(pLF>0.05) segs.push({type:'lf',pct:round2(pLF)});
+    if(pFO>0.05) segs.push({type:'fo',pct:round2(pFO)});
+    return {pFO,pLF,pPM,pHS,ind,segs,ht:720};
+  });
+}
+
+function renderChart(u,year){ renderChartSection(scopeUnits(),year); }
+
+function renderTable(units,year){
+  const an=DATA[year].annual,HT=DATA[year].ht;
+  const tb=document.getElementById('summaryBody'); tb.innerHTML='';
+  let tE=0,tT=0,tHFO=0,tHLF=0,tHPM=0,tHS=0,nA=0;
+  // Solo unidades activas
+  const activeUnits=units.filter(u=>an[u].active);
+  activeUnits.forEach(u=>{
+    const d=an[u],site=SITE_MAP[u];
+    if(d.eTeo){tE+=d.eInd;tT+=d.eTeo;tHFO+=d.hfo;tHLF+=d.hlf;tHPM+=d.hpm;tHS+=d.hs;nA++;}
+    tb.innerHTML+=`<tr>
+      <td>${u}</td>
+      <td><span class="site-tag ts-${site.toLowerCase()}">${site}</span></td>
+      <td>${d.pnet}</td>
+      <td>${d.eTeo?f(d.eTeo,0):'—'}</td>
+      <td>${d.eInd!=null?f(d.eInd,0):'—'}</td>
+      <td>${f(d.hfo,1)}</td>
+      <td>${f(d.hlf,1)}</td>
+      <td>${f(d.hpm,1)}</td>
+      <td class="${vc(d.ind)}">${d.ind!=null?d.ind.toFixed(2)+'%':'—'}</td>
+      <td class="${vc(100-(d.disp||0))}">${d.disp!=null?d.disp.toFixed(2)+'%':'—'}</td>
+      <td class="${vc(d.for)}">${d.for.toFixed(2)}%</td>
+      <td>${d.n_fo}</td><td>${d.n_lf}</td><td>${d.n_pm}</td>
+    </tr>`;
+  });
+  if(nA>1){
+    const indF=Math.min(tE/tT*100,100),dispF=100-indF,forF=tHFO/(tHFO+tHS)*100||0;
+    document.getElementById('summaryFoot').innerHTML=`<tr>
+      <td colspan="2">TOTAL (${nA} activas)</td><td>—</td>
+      <td>${f(tT,0)}</td><td>${f(tE,0)}</td>
+      <td>${f(tHFO,0)}</td><td>${f(tHLF,0)}</td><td>${f(tHPM,0)}</td>
+      <td class="${vc(indF)}">${indF.toFixed(2)}%</td><td>${dispF.toFixed(2)}%</td>
+      <td class="${vc(forF)}">${forF.toFixed(2)}%</td><td colspan="3"></td></tr>`;
+  } else document.getElementById('summaryFoot').innerHTML='';
+}
+
+function renderEvents(units,year){
+  const an=DATA[year].annual;
+  const tg=document.getElementById('topevGrid');
+  tg.className='topev-grid fade'; tg.innerHTML='';
+
+  // Sync botones de orden y mostrar
+  document.querySelectorAll('.ev-sort-btn[data-sort]').forEach(b=>b.classList.toggle('active',b.dataset.sort===evSort));
+  const dirBtn=document.getElementById('evtDirBtn');
+  if(dirBtn) dirBtn.textContent=evDir==='desc'?'↓ DESC':'↑ ASC';
+  const showTop=document.getElementById('evtShowTop');
+  const showAll=document.getElementById('evtShowAll');
+  if(showTop) showTop.classList.toggle('active', evShow==='top');
+  if(showAll) showAll.classList.toggle('active', evShow==='all');
+
+  // Tooltip compartido
+  let evTooltip=document.getElementById('evTooltip');
+  if(!evTooltip){
+    evTooltip=document.createElement('div');
+    evTooltip.id='evTooltip';
+    evTooltip.style.cssText='display:none;position:fixed;z-index:300;background:rgba(7,9,13,0.97);border:1px solid var(--accent);padding:10px 16px;border-radius:3px;pointer-events:none;font-family:var(--mono);font-size:13px;color:#e0eef8;max-width:300px;line-height:1.7;box-shadow:0 4px 20px rgba(0,0,0,.6);';
+    document.body.appendChild(evTooltip);
+  }
+
+  units.filter(u=>an[u].active).forEach(u=>{
+    const rawEvs=an[u].topEvs||[];
+    // Aplicar orden
+    const evs=[...rawEvs].sort((a,b)=>{
+      let va,vb;
+      if(evSort==='e')      { va=a.e; vb=b.e; }
+      else if(evSort==='d') { va=a.d; vb=b.d; }
+      else                  { va=a.i; vb=b.i; }
+      if(va<vb) return evDir==='desc'?1:-1;
+      if(va>vb) return evDir==='desc'?-1:1;
+      return 0;
+    });
+    const evsFinal=evShow==='top'?evs.slice(0,5):evs;
+    const nEvs=evsFinal.length;
+    const card=document.createElement('div');
+    card.className='topev-card';
+    card.innerHTML=`
+      <div class="topev-title">${u}
+        <span style="color:var(--muted);font-size:11px;letter-spacing:1px"> · ${SITE_MAP[u]}</span>
+        ${rawEvs.length>0?`<span style="font-family:var(--mono);font-size:11px;color:var(--muted);float:right">${evShow==='top'&&rawEvs.length>5?`TOP 5 de ${rawEvs.length}`:nEvs+' evento'+(nEvs!==1?'s':'')}</span>`:''}
+      </div>
+      ${nEvs===0
+        ?`<div class="ev-empty">— Sin energía indisponible en ${year} —</div>`
+        :evsFinal.map((e,idx)=>`
+      <div class="ev-row ev-hoverable" data-idx="${idx}" style="cursor:pointer;">
+        <span class="${e.op==='DF'?'tag-fo':'tag-lf'}">${e.op}</span>
+        <span class="ev-dur">${f(e.d,2)} h</span>
+        <span class="ev-date">${e.i}<br>${e.f}</span>
+        <span class="ev-energy">${f(e.e,0)}<br><span style="font-size:10px;color:var(--muted)">MWh</span></span>
+      </div>
+      ${e.motivo||e.detalle?`<div style="font-family:var(--mono);font-size:12px;color:#5a7a90;padding:2px 0 6px 0;border-bottom:1px solid var(--border);line-height:1.5;">${e.motivo||e.detalle}</div>`:''}`).join('')}
+    `;
+    tg.appendChild(card);
+
+    const evData=evsFinal;
+    card.querySelectorAll('.ev-hoverable').forEach(row=>{
+      const idx=parseInt(row.dataset.idx);
+      const e=evData[idx];
+      row.addEventListener('mouseenter',()=>{
+        // Calcular impacto en IND unidad / sitio / flota
+        const unitETeo=an[u].eTeo||1;
+        const site=SITE_MAP[u];
+        const siteUnits=(site==='CEM'?CEM:CET);
+        const siteETeo=siteUnits.reduce((s,uu)=>(an[uu]?.eTeo||0)+s,0)||1;
+        const fleetETeo=ALL.reduce((s,uu)=>(an[uu]?.eTeo||0)+s,0)||1;
+        const impUnit=e.eRaw/unitETeo*100;
+        const impSite=e.eRaw/siteETeo*100;
+        const impFleet=e.eRaw/fleetETeo*100;
+
+        evTooltip.innerHTML=`
+          <div style="margin-bottom:6px;">
+            <span class="${e.op==='DF'?'tag-fo':'tag-lf'}" style="font-size:12px;padding:2px 8px">${e.op}</span>
+            <span style="color:#fff;font-weight:700;margin-left:8px">${u} · ${SITE_MAP[u]}</span>
+          </div>
+          <div><span style="color:var(--muted)">Inicio:</span> <b>${e.iDT||e.i}</b></div>
+          <div><span style="color:var(--muted)">Fin:</span>    <b>${e.fDT||e.f}</b></div>
+          <div><span style="color:var(--muted)">Duración:</span> ${f(e.d,2)} h</div>
+          <div><span style="color:var(--muted)">P. Indisponible:</span> ${f(e.p,1)} MW</div>
+          <div style="margin-bottom:6px"><span style="color:var(--blue);font-weight:700">Energía: ${f(e.e,0)} MWh</span></div>
+          <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:2px">
+            <div style="color:var(--muted);font-size:11px;margin-bottom:3px;letter-spacing:1px">IMPACTO EN IND. ENERGÉTICA</div>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;">
+              <span style="color:var(--muted)">Unidad (${u}):</span><span style="color:var(--accent);font-weight:700">${impUnit.toFixed(3)}%</span>
+              <span style="color:var(--muted)">Sitio (${site}):</span><span style="color:var(--accent)">${impSite.toFixed(3)}%</span>
+              <span style="color:var(--muted)">Flota:</span><span style="color:var(--accent)">${impFleet.toFixed(3)}%</span>
+            </div>
+          </div>
+          ${e.motivo?`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px"><b style="color:var(--muted)">Motivo:</b> ${e.motivo}</div>`:''}
+          ${e.detalle?`<div style="margin-top:2px"><b style="color:var(--muted)">Detalle:</b> ${e.detalle}</div>`:''}
+        `;
+        evTooltip.style.display='block';
+      });
+      row.addEventListener('mousemove',ev=>{
+        const pad=14, tw=evTooltip.offsetWidth, th=evTooltip.offsetHeight;
+        let x=ev.clientX+pad, y=ev.clientY-40;
+        if(x+tw>window.innerWidth-pad) x=ev.clientX-tw-pad;
+        if(y+th>window.innerHeight-pad) y=ev.clientY-th-pad;
+        evTooltip.style.left=x+'px'; evTooltip.style.top=y+'px';
+      });
+      row.addEventListener('mouseleave',()=>{ evTooltip.style.display='none'; });
+    });
+  });
+}
+
+/* ═══ INIT ═══ */
+function startApp(){
+  if(typeof XLSX==='undefined'){
+    setTimeout(startApp,200);
+    return;
+  }
+  loadData();
+}
+startApp();
+</script>
+</body>
+</html>
