@@ -194,7 +194,7 @@ header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
 .h-tag{font-family:var(--mono);font-size:16px;color:var(--accent);letter-spacing:4px;margin-bottom:5px;}
 h1{font-family:var(--head);font-size:clamp(34px,5.17vw,60px);font-weight:900;color:#fff;line-height:1;}
 h1 span{color:var(--accent);}
-.h-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+.h-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;width:376px;}
 .h-meta{font-family:var(--mono);font-size:16px;color:#9ab0c0;text-align:right;line-height:1.9;}
 .h-meta b{color:#e0eef8;}
 .h-sync{font-family:var(--mono);font-size:16px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border:1px solid var(--border);transition:all .2s;}
@@ -826,6 +826,10 @@ const CONFIG = {
   file  : 'Base_Dato_Indisponibilidad_GEN_CL.xlsx'
 };
 
+/* ═══ VERSIÓN DEL DASHBOARD ═══ */
+const VERSION = 'V2.31';
+const VERSION_DATE = '23-04-2026';
+
 /* ═══ CONSTANTES ═══ */
 const SITE_MAP={CTM3:'CEM',CTA:'CEM',CTH:'CEM',IEM:'CEM',CTM1:'CEM',CTM2:'CEM',U16:'CET',TG3:'CET',TG1:'CET',TG2:'CET'};
 const CEM=['CTM3','CTA','CTH','IEM','CTM1','CTM2'];
@@ -838,6 +842,7 @@ const YEARS=[2023,2024,2025,2026];
 let DATA=null, PNET={};
 let selYear='2025',selScope='flota',selUnit='CTM3',selChartUnit=null;
 let evFilter='both';
+let dbLastUpdate=null; // Fecha del último commit del Excel (string o null)
 let evSort='e', evDir='desc', evShow='top';
 let selMonth=null;
 let selKPI=null; // null = todas las tarjetas | 'ind'|'disp'|'eind'|'for'|'units'
@@ -896,7 +901,12 @@ function fetchLastUpdate(){
     .then(r=>r.json()).then(commits=>{
       if(commits[0]){
         const d=new Date(commits[0].commit.committer.date);
-        document.getElementById('lastUpdated').innerHTML=`Última actualización: <b>${d.toLocaleString('es-CL')}</b>`;
+        dbLastUpdate={
+          fecha:d.toLocaleDateString('es-CL'),
+          hora :d.toLocaleTimeString('es-CL')
+        };
+        // Si ya se renderizó, refrescar el header
+        if(DATA) render();
       }
     }).catch(()=>{});
 }
@@ -1099,9 +1109,10 @@ function calcYear(year, allEvents, allPM, vigency){
         const dur=(ee-es)/3600000;
         const pInd=e.op==='DF'?Pn:Math.max(Pn-e.carga,0);
         return {op:e.op,i:fmtDate(es),f:fmtDate(ee),
+                iTs:es,fTs:ee,
                 iDT:fmtDateTime(es),fDT:fmtDateTime(ee),
                 d:round2(dur),p:round1(pInd),
-                e:round0(pInd*dur),eRaw:pInd*dur,
+                e:round2(pInd*dur),eRaw:pInd*dur,
                 motivo:e.motivo||'',detalle:e.detalle||''};
       })
       .filter(e=>e.e>0&&e.d>=0.02)
@@ -1133,6 +1144,7 @@ function calcYear(year, allEvents, allPM, vigency){
         ht:round1(htM),
         hfo:round1(hfoM), hlf:round1(hlfM),
         hpm:round1(hpmM), hs:round1(hsDispM),
+        eInd:round2(eM),
         eTeo:round0(denomM),
         ind: fullPM?'PM':round2(Math.min(eM/denomM*100,100)),
         segs
@@ -1441,7 +1453,43 @@ function render(){
 
   document.getElementById('scopeBadge').textContent=scopeNames[selScope];
   document.getElementById('scopeBadge').className='scope-badge '+sbCls[selScope];
-  document.getElementById('hMeta').innerHTML=`PERÍODO: <b>01-ENE-${year} → ${isPartial?'11-ABR':'31-DIC'}-${year}${isPartial?' (parcial)':''}</b><br>HT BASE: <b>${HT.toLocaleString('es')} h/año</b>`;
+  // Calcular fecha del último evento del año seleccionado
+  const yearNum=parseInt(year);
+  const yearStart=new Date(yearNum,0,1).getTime();
+  const yearEnd=new Date(yearNum+1,0,1).getTime();
+  const evsInYear=(RAW.allEvents||[]).filter(e=>e.start<yearEnd&&e.end>yearStart);
+  let lastEvTxt='—';
+  if(evsInYear.length){
+    const lastMs=Math.max(...evsInYear.map(e=>Math.min(e.end,yearEnd)));
+    const d=new Date(lastMs);
+    lastEvTxt=`${String(d.getDate()).padStart(2,'0')}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+  }
+  // Estilos compartidos para ambos bloques (aseguran alineación de ':')
+  // Ambas columnas con width FIJO → ancho total idéntico → ':' en misma X
+  const L_STYLE='text-align:right;padding:0 6px 0 0;vertical-align:top;white-space:nowrap;width:170px;';
+  const V_STYLE='text-align:left;padding:0;vertical-align:top;white-space:nowrap;width:200px;';
+  const T_STYLE='margin-left:auto;border-collapse:collapse;line-height:1.6;table-layout:fixed;';
+  const ROW_MAIN=(lbl,val)=>`<tr><td style="${L_STYLE}">${lbl}</td><td style="${V_STYLE}">: <b>${val}</b></td></tr>`;
+  const ROW_SUB =(lbl,val)=>`<tr><td style="${L_STYLE}"><span style="color:var(--accent);margin-right:4px;">·</span>${lbl}</td><td style="${V_STYLE}">: <b>${val}</b></td></tr>`;
+  const ROW_SUB_CONT=(val)=>`<tr><td style="${L_STYLE}"></td><td style="${V_STYLE}">&nbsp;&nbsp;<b>${val}</b></td></tr>`;
+
+  // Bloque 1: Último evento + HT BASE
+  document.getElementById('hMeta').innerHTML=
+    `<table style="${T_STYLE}">`+
+      ROW_MAIN('Último evento',lastEvTxt)+
+      ROW_MAIN('HT BASE',HT.toLocaleString('es')+' h/año')+
+    `</table>`;
+
+  // Bloque 2: Actualizaciones (mismos estilos → : alineados con bloque 1)
+  let updRows=`<tr><td style="${L_STYLE}">Actualizaciones</td><td style="${V_STYLE}">:</td></tr>`;
+  if(dbLastUpdate){
+    updRows+=ROW_SUB('Base de datos',dbLastUpdate.fecha)+ROW_SUB_CONT(dbLastUpdate.hora);
+  } else {
+    updRows+=ROW_SUB('Base de datos','cargando...');
+  }
+  updRows+=ROW_SUB('Dashboard',VERSION)+ROW_SUB_CONT(VERSION_DATE);
+  document.getElementById('lastUpdated').innerHTML=
+    `<table style="${T_STYLE}">${updRows}</table>`;
   const sub=`· ${scopeNames[selScope]} · ${year}`;
   ['kpiSub','cardsSub','tlSub','ganttSub','cumSub','chartSub','tableSub','evtSub'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=sub;});
 
@@ -1875,7 +1923,7 @@ function renderKPIMonth(units,year){
   activeUnits.forEach(u=>{
     const mo=monthly[u][m];
     if(!mo||mo.ind==='PM') return;
-    const eIndU=mo.eTeo>0?mo.eTeo*(mo.ind/100):0;
+    const eIndU=mo.eInd!=null?mo.eInd:(mo.eTeo>0?mo.eTeo*(mo.ind/100):0);
     tEindM+=eIndU; tEteoM+=mo.eTeo||0;
     tHfoM+=mo.hfo||0; tHlfM+=mo.hlf||0; tHpmM+=mo.hpm||0;
     const hsU=Math.max((mo.ht||0)-(mo.hpm||0)-(mo.hfo||0)-(mo.hlf||0),0);
@@ -1896,10 +1944,10 @@ function renderKPIMonth(units,year){
       const tl=selKPIMonth==='ind'?'Indisponibilidad':'Disponibilidad';
       const rs=selKPIMonth==='ind'?indM.toFixed(4)+'%':dispM.toFixed(4)+'%';
       const cl=selKPIMonth==='ind'?'var(--blue)':'var(--green)';
-      const rw=unitData.map(tu=>`<tr><td>${tu.u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[tu.u]}</span></td><td>${f(tu.eInd,0)}</td><td>${f(tu.eTeo,0)}</td><td>${tEteoM>0?(tu.eTeo/tEteoM*100).toFixed(2):'0'}%</td><td style="color:var(--blue)">${tu.ind.toFixed(4)}%</td><td style="color:var(--green)">${tu.disp.toFixed(4)}%</td></tr>`).join('');
-      detailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BK}<div class="kpi-detail-title">${tl} · ${mName} ${year}</div><div class="kpi-detail-result" style="color:${cl}">${rs}</div></div><div class="kpi-detail-formula"><b>IND</b> = ${f(tEindM,0)} / ${f(tEteoM,0)} × 100 = <b>${indM.toFixed(4)}%</b></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th><th>Peso</th><th>IND</th><th>DISP</th></tr></thead><tbody>${rw}</tbody><tfoot><tr><td>TOTAL</td><td>${f(tEindM,0)}</td><td>${f(tEteoM,0)}</td><td>100%</td><td style="color:var(--blue)">${indM.toFixed(4)}%</td><td style="color:var(--green)">${dispM.toFixed(4)}%</td></tr></tfoot></table></div>`;
+      const rw=unitData.map(tu=>`<tr><td>${tu.u} <span style="font-size:11px;color:var(--muted)">${SITE_MAP[tu.u]}</span></td><td>${f(tu.eInd,2)}</td><td>${f(tu.eTeo,0)}</td><td>${tEteoM>0?(tu.eTeo/tEteoM*100).toFixed(2):'0'}%</td><td style="color:var(--blue)">${tu.ind.toFixed(4)}%</td><td style="color:var(--green)">${tu.disp.toFixed(4)}%</td></tr>`).join('');
+      detailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BK}<div class="kpi-detail-title">${tl} · ${mName} ${year}</div><div class="kpi-detail-result" style="color:${cl}">${rs}</div></div><div class="kpi-detail-formula"><b>IND</b> = ${f(tEindM,2)} / ${f(tEteoM,0)} × 100 = <b>${indM.toFixed(4)}%</b></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th><th>Peso</th><th>IND</th><th>DISP</th></tr></thead><tbody>${rw}</tbody><tfoot><tr><td>TOTAL</td><td>${f(tEindM,2)}</td><td>${f(tEteoM,0)}</td><td>100%</td><td style="color:var(--blue)">${indM.toFixed(4)}%</td><td style="color:var(--green)">${dispM.toFixed(4)}%</td></tr></tfoot></table></div>`;
     } else if(selKPIMonth==='eind'){
-      const rw=unitData.map(tu=>`<tr><td>${tu.u}</td><td>${tu.pnet}MW</td><td>${f(tu.hfo,2)}h</td><td>${f(tu.hlf,2)}h</td><td style="color:var(--red)">${f(tu.eInd,0)}</td><td>${tEindM>0?(tu.eInd/tEindM*100).toFixed(1):'0'}%</td></tr>`).join('');
+      const rw=unitData.map(tu=>`<tr><td>${tu.u}</td><td>${tu.pnet}MW</td><td>${f(tu.hfo,2)}h</td><td>${f(tu.hlf,2)}h</td><td style="color:var(--red)">${f(tu.eInd,2)}</td><td>${tEindM>0?(tu.eInd/tEindM*100).toFixed(1):'0'}%</td></tr>`).join('');
       detailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BK}<div class="kpi-detail-title">E.Indisponible · ${mName} ${year}</div><div class="kpi-detail-result" style="color:var(--red)">${(tEindM/1000).toFixed(3)} GWh</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>P.Neta</th><th>H.DF</th><th>H.LF</th><th>E.Ind.</th><th>%</th></tr></thead><tbody>${rw}</tbody></table></div>`;
     } else if(selKPIMonth==='for'){
       const rw=unitData.map(tu=>`<tr><td>${tu.u}</td><td>${tu.pnet}MW</td><td style="color:var(--red)">${f(tu.hfo,2)}h</td><td>${f(tu.hs,2)}h</td><td style="color:var(--accent)">${tu.for.toFixed(4)}%</td></tr>`).join('');
@@ -1918,10 +1966,10 @@ function renderKPIMonth(units,year){
     const ddM2=String(now.getDate()).padStart(2,'0'),mmM2=String(now.getMonth()+1).padStart(2,'0');
     if(selKPIMonthToday==='ind'||selKPIMonthToday==='disp'){
       const tl2=selKPIMonthToday==='ind'?'IND':'DISP';const rs2=selKPIMonthToday==='ind'?mt2I.toFixed(4)+'%':(100-mt2I).toFixed(4)+'%';const cl2=selKPIMonthToday==='ind'?'var(--blue)':'var(--green)';
-      const rw2=mt2U.map(tu=>`<tr><td>${tu.u}</td><td>${f(tu.eInd,0)}</td><td>${f(tu.eTeo,0)}</td><td style="color:var(--blue)">${tu.ind.toFixed(4)}%</td></tr>`).join('');
+      const rw2=mt2U.map(tu=>`<tr><td>${tu.u}</td><td>${f(tu.eInd,2)}</td><td>${f(tu.eTeo,0)}</td><td style="color:var(--blue)">${tu.ind.toFixed(4)}%</td></tr>`).join('');
       todayDetailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BKT}<div class="kpi-detail-title">${tl2} al día de hoy · ${mName}</div><div class="kpi-detail-result" style="color:${cl2}">${rs2}</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th><th>IND</th></tr></thead><tbody>${rw2}</tbody></table></div>`;
     } else if(selKPIMonthToday==='eind'){
-      todayDetailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BKT}<div class="kpi-detail-title">E.Ind. al día · ${mName}</div><div class="kpi-detail-result" style="color:var(--red)">${(mt2E/1000).toFixed(3)} GWh</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th></tr></thead><tbody>${mt2U.map(tu=>`<tr><td>${tu.u}</td><td style="color:var(--red)">${f(tu.eInd,0)}</td><td>${f(tu.eTeo,0)}</td></tr>`).join('')}</tbody></table></div>`;
+      todayDetailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BKT}<div class="kpi-detail-title">E.Ind. al día · ${mName}</div><div class="kpi-detail-result" style="color:var(--red)">${(mt2E/1000).toFixed(3)} GWh</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>E.Ind.</th><th>E.Teo.</th></tr></thead><tbody>${mt2U.map(tu=>`<tr><td>${tu.u}</td><td style="color:var(--red)">${f(tu.eInd,2)}</td><td>${f(tu.eTeo,0)}</td></tr>`).join('')}</tbody></table></div>`;
     } else if(selKPIMonthToday==='for'){
       todayDetailWrap.innerHTML=`<div class="kpi-detail"><div class="kpi-detail-header">${BKT}<div class="kpi-detail-title">FOR al día · ${mName}</div><div class="kpi-detail-result" style="color:var(--accent)">${mt2For.toFixed(4)}%</div></div><table class="kpi-dtable"><thead><tr><th>Unidad</th><th>H.DF</th><th>H.Serv.</th><th>FOR</th></tr></thead><tbody>${mt2U.map(tu=>`<tr><td>${tu.u}</td><td style="color:var(--red)">${f(tu.hfo,2)}h</td><td>${f(tu.hs,2)}h</td><td style="color:var(--accent)">${tu.for.toFixed(4)}%</td></tr>`).join('')}</tbody></table></div>`;
     }
@@ -3010,7 +3058,7 @@ function renderEvents(units,year){
       let va,vb;
       if(evSort==='e')      { va=a.e; vb=b.e; }
       else if(evSort==='d') { va=a.d; vb=b.d; }
-      else                  { va=a.i; vb=b.i; }
+      else                  { va=a.iTs; vb=b.iTs; }
       if(va<vb) return evDir==='desc'?1:-1;
       if(va>vb) return evDir==='desc'?-1:1;
       return 0;
@@ -3031,7 +3079,7 @@ function renderEvents(units,year){
         <span class="${e.op==='DF'?'tag-fo':'tag-lf'}">${e.op}</span>
         <span class="ev-dur">${f(e.d,2)} h</span>
         <span class="ev-date">${e.i}<br>${e.f}</span>
-        <span class="ev-energy">${f(e.e,0)}<br><span style="font-size:10px;color:var(--muted)">MWh</span></span>
+        <span class="ev-energy">${f(e.e,2)}<br><span style="font-size:10px;color:var(--muted)">MWh</span></span>
       </div>
       ${e.motivo||e.detalle?`<div style="font-family:var(--mono);font-size:12px;color:#5a7a90;padding:2px 0 6px 0;border-bottom:1px solid var(--border);line-height:1.5;">${e.motivo||e.detalle}</div>`:''}`).join('')}
     `;
@@ -3061,7 +3109,7 @@ function renderEvents(units,year){
           <div><span style="color:var(--muted)">Fin:</span>    <b>${e.fDT||e.f}</b></div>
           <div><span style="color:var(--muted)">Duración:</span> ${f(e.d,2)} h</div>
           <div><span style="color:var(--muted)">P. Indisponible:</span> ${f(e.p,1)} MW</div>
-          <div style="margin-bottom:6px"><span style="color:var(--blue);font-weight:700">Energía: ${f(e.e,0)} MWh</span></div>
+          <div style="margin-bottom:6px"><span style="color:var(--blue);font-weight:700">Energía: ${f(e.e,2)} MWh</span></div>
           <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:2px">
             <div style="color:var(--muted);font-size:11px;margin-bottom:3px;letter-spacing:1px">IMPACTO EN IND. ENERGÉTICA</div>
             <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;">
